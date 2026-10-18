@@ -5,10 +5,12 @@ from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.response import Response
 
-from .models import Actividade, Pessoa, Seccao, Sitio, SitioActividade, Tarefa
+from .models import (Actividade, ModeloPLC, ModeloRTU, Obstaculo, Pessoa, PLCSitio, Seccao, Sitio,
+                     SitioActividade, Tarefa)
 from .permissions import (CatalogoPermission, SitioActividadePermission, TarefaPermission,
                           TemPerfil)
-from .serializers import (ActividadeSerializer, PessoaSerializer, SeccaoSerializer,
+from .serializers import (ActividadeSerializer, ModeloPLCSerializer, ModeloRTUSerializer,
+                          ObstaculoSerializer, PessoaSerializer, PLCSitioSerializer, SeccaoSerializer,
                           SitioActividadeSerializer, SitioDetailSerializer, SitioListSerializer,
                           TarefaSerializer, calcular_progresso)
 
@@ -40,6 +42,15 @@ class ActividadeViewSet(viewsets.ModelViewSet):
     serializer_class = ActividadeSerializer
     permission_classes = [CatalogoPermission]
 
+class ModeloRTUViewSet(viewsets.ModelViewSet):
+    queryset = ModeloRTU.objects.all()
+    serializer_class = ModeloRTUSerializer
+    permission_classes = [CatalogoPermission]
+
+class ModeloPLCViewSet(viewsets.ModelViewSet):
+    queryset = ModeloPLC.objects.all()
+    serializer_class = ModeloPLCSerializer
+    permission_classes = [CatalogoPermission]
 
 # ---------- Sítios ----------
 
@@ -48,9 +59,13 @@ class SitioViewSet(viewsets.ModelViewSet):
     permission_classes = [CatalogoPermission]
 
     def get_queryset(self):
-        qs = Sitio.objects.prefetch_related("actividades__actividade")
+        qs = Sitio.objects.select_related("modelo_rtu").prefetch_related("actividades__actividade")
         if self.action == "retrieve":
-            qs = qs.prefetch_related("actividades__actualizado_por__pessoa")
+            qs = qs.prefetch_related(
+                "actividades__actualizado_por__pessoa",
+                "plcs__modelo", "plcs__modelo_substituto", "plcs_actualizado_por__pessoa",
+                "obstaculos__registado_por__pessoa",
+            )
         p = self.request.query_params
         if p.get("lote"):
             qs = qs.filter(lote=p["lote"])
@@ -74,6 +89,36 @@ class SitioActividadeViewSet(viewsets.ModelViewSet):
             qs = qs.filter(sitio_id=self.request.query_params["sitio"])
         return qs.order_by("sitio", "actividade__fase", "actividade__ordem")
 
+class PLCSitioViewSet(viewsets.ModelViewSet):
+    """/api/plcs/?sitio=3&accao=substituir — Técnico cria/altera, só Administrador elimina."""
+    serializer_class = PLCSitioSerializer
+    permission_classes = [TarefaPermission]
+
+    def get_queryset(self):
+        qs = PLCSitio.objects.select_related("sitio", "modelo", "modelo_substituto",
+                                             "actualizado_por__pessoa")
+        p = self.request.query_params
+        if p.get("sitio"):
+            qs = qs.filter(sitio_id=p["sitio"])
+        if p.get("accao"):
+            qs = qs.filter(accao=p["accao"])
+        return qs
+
+
+class ObstaculoViewSet(viewsets.ModelViewSet):
+    """/api/obstaculos/?sitio=3&estado=aberto&categoria=terceiros&entidade=ENDE"""
+    serializer_class = ObstaculoSerializer
+    permission_classes = [TarefaPermission]
+
+    def get_queryset(self):
+        qs = Obstaculo.objects.select_related("sitio", "registado_por__pessoa")
+        p = self.request.query_params
+        for campo in ("sitio", "estado", "categoria", "tarefa"):
+            if p.get(campo):
+                qs = qs.filter(**{campo: p[campo]})
+        if p.get("entidade"):
+            qs = qs.filter(entidade__icontains=p["entidade"])
+        return qs
 
 # ---------- Tarefas ----------
 

@@ -3,7 +3,8 @@ from decimal import Decimal
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Actividade, Pessoa, Seccao, Sitio, SitioActividade, Tarefa
+from .models import (Actividade, ModeloPLC, ModeloRTU, Obstaculo, Pessoa, PLCSitio, Seccao, Sitio,
+                     SitioActividade, Tarefa)
 
 FASES_COM_PESO = ("cfg", "mon", "tst")
 
@@ -45,6 +46,98 @@ class ActividadeSerializer(serializers.ModelSerializer):
         mode = Actividade
         fields = ["id", "codigo", "nome", "fase", "fase_nome", "ordem"]
 
+class ModeloRTUSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModeloRTU
+        fields = ["id", "fabricante", "modelo", "ferramenta", "notas", "activo"]
+
+
+class ModeloPLCSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModeloPLC
+        fields = ["id", "fabricante", "modelo", "protocolos", "notas", "activo"]
+
+
+# ---------- PLC do sítio ----------
+
+class PLCSitioSerializer(serializers.ModelSerializer):
+    modelo_nome = serializers.StringRelatedField(source="modelo", read_only=True)
+    modelo_substituto_nome = serializers.StringRelatedField(source="modelo_substituto", read_only=True)
+    accao_nome = serializers.CharField(source="get_accao_display", read_only=True)
+    estado_substituicao_nome = serializers.CharField(source="get_estado_substituicao_display", read_only=True)
+    actualizado_por_nome = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PLCSitio
+        fields = ["id", "sitio", "designacao", "modelo", "modelo_nome", "integrador",
+                  "codigo_fonte_disponivel", "accao", "accao_nome", "modelo_substituto",
+                  "modelo_substituto_nome", "motivo_substituicao", "estado_substituicao",
+                  "estado_substituicao_nome", "notas", "actualizado_em", "actualizado_por_nome"]
+        read_only_fields = ["actualizado_em"]
+
+    def get_actualizado_por_nome(self, obj):
+        return nome_utilizador(obj.actualizado_por)
+
+    def validate(self, attrs):
+        inst = self.instance
+        accao = attrs.get("accao", getattr(inst, "accao", PLCSitio.Accao.MANTER))
+        if accao == PLCSitio.Accao.SUBSTITUIR:
+            motivo = attrs.get("motivo_substituicao", getattr(inst, "motivo_substituicao", ""))
+            if not motivo.strip():
+                raise serializers.ValidationError({"motivo_substituicao": "Indique o motivo da substituição."})
+            if not attrs.get("estado_substituicao", getattr(inst, "estado_substituicao", "")):
+                attrs["estado_substituicao"] = PLCSitio.EstadoSubstituicao.PREVISTO
+        else:
+            attrs["modelo_substituto"] = None
+            attrs["motivo_substituicao"] = ""
+            attrs["estado_substituicao"] = ""
+        return attrs
+
+    def create(self, validated_data):
+        validated_data["actualizado_por"] = self.context["request"].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data["actualizado_por"] = self.context["request"].user
+        return super().update(instance, validated_data)
+
+
+# ---------- Obstáculos ----------
+
+class ObstaculoSerializer(serializers.ModelSerializer):
+    sitio_nome = serializers.StringRelatedField(source="sitio", read_only=True)
+    categoria_nome = serializers.CharField(source="get_categoria_display", read_only=True)
+    estado_nome = serializers.CharField(source="get_estado_display", read_only=True)
+    registado_por_nome = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Obstaculo
+        fields = ["id", "sitio", "sitio_nome", "tarefa", "data", "categoria", "categoria_nome",
+                  "entidade", "descricao", "impacto", "solucao", "estado", "estado_nome",
+                  "resolvido_em", "registado_por_nome", "criado_em", "actualizado_em"]
+        read_only_fields = ["criado_em", "actualizado_em"]
+
+    def get_registado_por_nome(self, obj):
+        return nome_utilizador(obj.registado_por)
+
+    def validate(self, attrs):
+        inst = self.instance
+        estado = attrs.get("estado", getattr(inst, "estado", Obstaculo.Estado.ABERTO))
+        if estado == Obstaculo.Estado.RESOLVIDO:
+            if not attrs.get("resolvido_em", getattr(inst, "resolvido_em", None)):
+                attrs["resolvido_em"] = timezone.localdate()
+        else:
+            attrs["resolvido_em"] = None
+        tarefa = attrs.get("tarefa", getattr(inst, "tarefa", None))
+        sitio = attrs.get("sitio", getattr(inst, "sitio", None))
+        if tarefa and tarefa.sitio_id and sitio and tarefa.sitio_id != sitio.id:
+            raise serializers.ValidationError({"tarefa": "Esta tarefa pertence a outro sítio."})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data["registado_por"] = self.context["request"].user
+        return super().create(validated_data)
+
 # -------------------------- Previsto / Realizdo --------------------------
 
 class SitioActividadeSerializer(serializers.ModelSerializer):
@@ -81,29 +174,37 @@ class SitioActividadeSerializer(serializers.ModelSerializer):
 class SitioListSerializer(serializers.ModelSerializer):
     """Uma linha da matriz do painel."""
     tipo_nome = serializers.CharField(source="get_tipo_display", read_only=True)
+    modelo_rtu_nome = serializers.StringRelatedField(source="modelo_rtu", read_only=True)
+    tipo_instalacao_nome = serializers.CharField(source="get_tipo_instalacao_display", read_only=True)
     progresso = serializers.SerializerMethodField()
 
     class Meta:
         model = Sitio
-        fields = ["id", "tipo", "tipo_nome", "nome", "lote", "rtu_modelo", "ferramenta",
-                  "entradas", "ordem", "progresso"]
+        fields = ["id", "tipo", "tipo_nome", "nome", "lote", "modelo_rtu", "modelo_rtu_nome",
+                  "rtu_modelo", "ferramenta", "entradas", "tipo_instalacao", "tipo_instalacao_nome",
+                  "instalacao_detalhe", "ordem", "progresso"]
 
     def get_progresso(self, obj):
         return calcular_progresso(obj.actividades.all())
 
 
 class SitioDetailSerializer(SitioListSerializer):
-    """Ficha do sítio: P/R de todas as actividades + tarefas abertas."""
+    """Ficha do sítio: P/R, PLC, obstáculos e tarefas abertas."""
     actividades = SitioActividadeSerializer(many=True, read_only=True)
+    plcs = PLCSitioSerializer(many=True, read_only=True)
+    obstaculos = ObstaculoSerializer(many=True, read_only=True)
     tarefas_abertas = serializers.SerializerMethodField()
 
     class Meta(SitioListSerializer.Meta):
-        fields = SitioListSerializer.Meta.fields + ["notas", "actividades", "tarefas_abertas"]
+        fields = SitioListSerializer.Meta.fields + ["notas", "actividades", "plcs", "obstaculos",
+                                                    "tarefas_abertas"]
 
     def get_tarefas_abertas(self, obj):
-        abertas = obj.tarefas.filter(progresso__lt=100).order_by("inicio")
+        abertas = (obj.tarefas.filter(progresso__lt=100)
+                   .select_related("seccao", "sitio", "criado_por__pessoa", "actualizado_por__pessoa")
+                   .prefetch_related("equipa")
+                   .order_by("inicio"))
         return TarefaSerializer(abertas, many=True, context=self.context).data
-
 
 # ---------- Tarefas ----------
 

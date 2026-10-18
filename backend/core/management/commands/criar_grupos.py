@@ -3,7 +3,7 @@ from django.core.management.base import BaseCommand
 
 from core.permissions import ADMIN, LEITOR, TECNICO
 
-MODELOS = ["sitio", "actividade", "sitioactividade", "pessoa", "seccao", "tarefa"]
+MODELOS = ["sitio", "actividade", "sitioactividade", "pessoa", "seccao", "tarefa", "modelortu", "modeloplc", "plcsitio", "obstaculo"]
 
 
 def perms(*codenames):
@@ -19,7 +19,7 @@ class Command(BaseCommand):
 
         regras = {
             ADMIN: tudo,
-            TECNICO: ver + ["add_tarefa", "change_tarefa", "change_sitioactividade"],
+            TECNICO: ver + ["add_tarefa", "change_tarefa", "change_sitioactividade", "add_plcsitio", "change_plcsitio", "add_obstaculo", "change_obstaculo"],
             LEITOR: ver,
         }
         for nome, codenames in regras.items():
