@@ -1,0 +1,20 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Markdown files
+*.md
+!README.md
+
+# Sekrè lokal
+.env
+.env.local
+.env.*.local
+!.env.example

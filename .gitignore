@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+db.sqlite3
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+npm-debug.log*
+
+# Docker: valè reyèl yo (modpas, SECRET_KEY) rete lokal
+docker-compose.override.yml
+
+# Done pwojè a (non moun, sit EPAL)
+backend/core/seed/*.json
+
+# Editè ak sistèm
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Markdown
+*.md
+!README.md
+
+# Sekrè lokal
+.env
+.env.local
+.env.*.local
+!.env.example
