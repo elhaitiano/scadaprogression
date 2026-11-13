@@ -21,6 +21,7 @@ docker-compose.override.yml
 
 # Done pwojè a (non moun, sit EPAL)
 backend/core/seed/*.json
+docs/
 
 # Editè ak sistèm
 .vscode/

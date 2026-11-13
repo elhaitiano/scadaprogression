@@ -21,6 +21,13 @@ def calcular_progresso(linhas):
     res["global"] = sum(res[f] for f in FASES_COM_PESO) / len(FASES_COM_PESO)
     return {k: round(v, 4) for k, v in res.items()}
 
+def texto_equipa(tarefa):
+    """'Carlindo Vaal + Steve Jean-Baptiste - ENG CONSULT', como no planeamento semanal."""
+    texto = " + ".join(p.nome for p in tarefa.equipa.all())
+    if tarefa.equipa_externa:
+        texto = f"{texto} - {tarefa.equipa_externa}" if texto else tarefa.equipa_externa
+    return texto
+
 def nome_utilizador(user):
     if not user:
         return None
@@ -37,7 +44,7 @@ class SeccaoSerializer(serializers.ModelSerializer):
 class PessoaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pessoa
-        fields = ["id", "nome", "funcao", "ativo"]
+        fields = ["id", "nome", "funcao", "activo"]
 
 class ActividadeSerializer(serializers.ModelSerializer):
     fase_nome = serializers.CharField(source="get_fase_display", read_only=True)
@@ -212,6 +219,7 @@ class TarefaSerializer(serializers.ModelSerializer):
     equipa = serializers.PrimaryKeyRelatedField(many=True, queryset=Pessoa.objects.filter(activo=True),
                                                 required=False)
     equipa_nomes = serializers.SerializerMethodField()
+    equipa_texto = serializers.SerializerMethodField()
     seccao_nome = serializers.CharField(source="seccao.nome", read_only=True)
     sitio_nome = serializers.SerializerMethodField()
     estado = serializers.SerializerMethodField()
@@ -222,13 +230,16 @@ class TarefaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tarefa
         fields = ["id", "seccao", "seccao_nome", "sitio", "sitio_nome", "localizacao", "descricao",
-                  "equipa", "equipa_nomes", "recursos", "progresso", "inicio", "fim", "dias",
+                  "equipa", "equipa_nomes", "equipa_externa", "equipa_texto", "recursos", "progresso", "inicio", "fim", "dias",
                   "estado", "bloqueado", "motivo_bloqueio", "notas",
                   "criado_em", "criado_por_nome", "actualizado_em", "actualizado_por_nome"]
         read_only_fields = ["criado_em", "actualizado_em"]
 
     def get_equipa_nomes(self, obj):
         return [p.nome for p in obj.equipa.all()]
+
+    def get_equipa_texto(self, obj):
+        return texto_equipa(obj)
 
     def get_sitio_nome(self, obj):
         return str(obj.sitio) if obj.sitio else None

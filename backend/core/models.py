@@ -146,6 +146,7 @@ class Tarefa(models.Model):
     localizacao = models.CharField("Localização", max_length=120)
     descricao = models.CharField("Tarefa", max_length=255)
     equipa = models.ManyToManyField(Pessoa, blank=True, related_name="tarefas")
+    equipa_externa = models.CharField("Equipa externa", max_length=200, blank=True, help_text="Entidades fora da equipa do Pilar 2 ou da SUEZ, ex.: ENG CONSULT, Pilar 3A, etc . . .")
     recursos = models.PositiveSmallIntegerField("Recursos afectados", null=True, blank=True)
     progresso = models.PositiveSmallIntegerField(default=0,
                                                  validators=[MaxValueValidator(100)])

@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import timedelta
+from datetime import date, timedelta
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -140,9 +140,15 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=8),
+    # "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": ("Bearer",),
 }
 
 CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+
+# ---------- Planeamento ----------
+PROJECTO_NOME = "ProAgua Pilar 2 - Distribuição"
+PROJECTO_INICIO = date(2026, 4, 6)   # aparece no cabeçalho do planeamento exportado
+
+CORS_EXPOSE_HEADERS = ["Content-Disposition"]  # o frontend lê o nome do ficheiro exportado

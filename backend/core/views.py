@@ -1,9 +1,14 @@
 from datetime import date, timedelta
 
+from django.http import HttpResponse
+
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
+
+from .exportar import construir_planeamento, nome_ficheiro
 
 from .models import (Actividade, ModeloPLC, ModeloRTU, Obstaculo, Pessoa, PLCSitio, Seccao, Sitio,
                      SitioActividade, Tarefa)
@@ -136,6 +141,25 @@ class TarefaViewSet(viewsets.ModelViewSet):
     serializer_class = TarefaSerializer
     permission_classes = [TarefaPermission]
 
+    def _semana(self):
+        """Segunda-feira pedida em ?semana=; a exportação usa a semana actual por omissão"""
+        d = _data(self.request.query_params.get("semana"))
+        if d is None and self.action == "exportar":
+            d = timezone.localdate() - timedelta(days=7)
+        return d - timedelta(days=d.weekday()) if d else None
+
+    @action(detail=False, methods=["get"])
+    def exportar(self, request):
+        """Excel no formato do planeamento semanal, com os mesmos filtros da lista."""
+        segunda = self._semana()
+        conteudo = construir_planeamento(self.get_queryset(), segunda)
+        resposta = HttpResponse(
+            conteudo,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        resposta["Content-Disposition"] = f'attachement; filename="{nome_ficheiro(segunda)}"'
+        return resposta
+
     def get_queryset(self):
         qs = (Tarefa.objects
               .select_related("seccao", "sitio", "criado_por__pessoa", "actualizado_por__pessoa")
@@ -143,9 +167,9 @@ class TarefaViewSet(viewsets.ModelViewSet):
         p = self.request.query_params
         hoje = timezone.localdate()
 
-        semana = _data(p.get("semana"))
+        semana = self._semana()
         if semana:
-            inicio = semana - timedelta(days=semana.weekday())
+            inicio = semana
             fim = inicio + timedelta(days=13)
             qs = qs.filter(Q(progresso__lt=100) | Q(inicio__lte=fim, fim__gte=inicio))
 
