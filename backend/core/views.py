@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from .exportar import construir_planeamento, nome_ficheiro
+from .exportar_estado import construir_estado, nome_ficheiro as nome_ficheiro_estado
 
 from .models import (Actividade, ModeloPLC, ModeloRTU, Obstaculo, Pessoa, PLCSitio, Seccao, Sitio,
                      SitioActividade, Tarefa)
@@ -68,7 +69,7 @@ class SitioViewSet(viewsets.ModelViewSet):
         if self.action == "retrieve":
             qs = qs.prefetch_related(
                 "actividades__actualizado_por__pessoa",
-                "plcs__modelo", "plcs__modelo_substituto", "plcs_actualizado_por__pessoa",
+                "plcs__modelo", "plcs__modelo_substituto", "plcs__actualizado_por__pessoa",
                 "obstaculos__registado_por__pessoa",
             )
         p = self.request.query_params
@@ -80,6 +81,16 @@ class SitioViewSet(viewsets.ModelViewSet):
 
     def get_serializer_class(self):
         return SitioDetailSerializer if self.action == "retrieve" else SitioListSerializer
+
+    @action(detail=False, methods=["get"])
+    def exportar(self, request):
+        """Excel no formato 'ProAgua_Estado_RTU_por_Sitio' (Estado RTU + Base de cálculo)."""
+        reposta = HttpResponse(
+            construir_estado(),
+            content_type="application/vnd.opnxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        reposta["Content-Disposition"] = f'attachment; filename="{nome_ficheiro_estado()}"'
+        return reposta
 
 
 class SitioActividadeViewSet(viewsets.ModelViewSet):

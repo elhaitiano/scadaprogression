@@ -1,0 +1,374 @@
+/* Estado RTU por sítio — reflecte a folha "Estado RTU" do Excel. */
+
+.pagina {
+  --c-ok: var(--ok, #2e7d32);
+  --c-ok-soft: color-mix(in srgb, var(--c-ok) 14%, transparent);
+  --c-curso: var(--navy);
+  --c-curso-soft: var(--navy-soft);
+  --c-zero: var(--muted);
+  --c-zero-soft: var(--surface-2, #f1f4f7);
+  --c-trilho: var(--track, #e5ebf1);
+  padding-block: 24px 56px;
+}
+
+.topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.topo h1 {
+  font-family: var(--display);
+  font-size: 34px;
+  line-height: 1.05;
+  margin: 2px 0 0;
+  color: var(--navy);
+}
+
+.sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.erro {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--crit-soft);
+  color: var(--crit);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- resumo ---------- */
+.resumo {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 2.4fr);
+  grid-template-areas: "global lotes" "contagens contagens";
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.global,
+.lote {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+}
+
+.global {
+  grid-area: global;
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--on-navy);
+}
+
+.lotes {
+  grid-area: lotes;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lote {
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.lote[data-foco="true"] {
+  border-color: var(--navy);
+  box-shadow: inset 0 3px 0 #a9dc15;
+}
+
+.lote[aria-pressed="true"] {
+  background: var(--navy-soft);
+  border-color: var(--navy);
+}
+
+.rotulo {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.grande,
+.medio {
+  font-family: var(--display);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.grande { font-size: 44px; }
+.medio { font-size: 30px; color: var(--navy); }
+
+.nota {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.barraGrande,
+.barraMedia {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.barraMedia { background: var(--c-trilho); }
+
+.barraGrande i,
+.barraMedia i {
+  display: block;
+  height: 100%;
+  background: #a9dc15;
+}
+
+.barraMedia i { background: var(--navy); }
+
+.contagens {
+  grid-area: contagens;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.contagem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.contagem b {
+  font-family: var(--display);
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.contagem[data-sit="concluido"] > span { color: var(--c-ok); }
+.contagem[data-sit="em_curso"] > span { color: var(--c-curso); }
+.contagem[aria-pressed="true"] {
+  border-color: var(--navy);
+  background: var(--navy-soft);
+  color: var(--ink);
+}
+
+/* ---------- filtros ---------- */
+.filtros {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.filtros select,
+.pesquisa {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.pesquisa { flex: 1 1 240px; }
+
+.limpar {
+  border: 0;
+  background: none;
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---------- tabela ---------- */
+.quadro {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.vazio {
+  margin: 0;
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.rolagem {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tabela {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.tabela thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--navy);
+  color: var(--on-navy);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  padding: 10px;
+  white-space: nowrap;
+}
+
+.tabela td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.cTipo { width: 52px; text-align: center !important; }
+.cSitio { min-width: 120px; font-weight: 700; white-space: nowrap; }
+.cRtu { min-width: 200px; }
+.cRtu small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.cEntradas { min-width: 130px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.cFase { width: 128px; min-width: 128px; }
+.tabela thead .cFase { white-space: normal; line-height: 1.2; }
+
+.cSitio a {
+  color: var(--navy);
+  text-decoration: none;
+}
+
+.tipo {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--navy-soft);
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.linhaLote td {
+  background: var(--navy-soft);
+  color: var(--navy);
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 8px 10px;
+}
+
+.linhaLote td span {
+  margin-left: 10px;
+  font-family: var(--body, Arial, sans-serif);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.linha { cursor: pointer; }
+.linha:hover td { background: color-mix(in srgb, var(--navy-soft) 55%, transparent); }
+
+/* célula de fase: símbolo + % + mini barra, cores do formato condicional do Excel */
+.celula {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  grid-template-rows: auto 5px;
+  column-gap: 4px;
+  row-gap: 3px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.simbolo { grid-row: 1; font-size: 13px; }
+.valor { grid-row: 1; font-weight: 600; }
+.barra {
+  grid-column: 1 / -1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.barra i { display: block; height: 100%; }
+
+.celula[data-sit="concluido"] { background: var(--c-ok-soft); color: var(--c-ok); }
+.celula[data-sit="concluido"] .barra i { background: var(--c-ok); }
+.celula[data-sit="em_curso"] { background: var(--c-curso-soft); color: var(--c-curso); }
+.celula[data-sit="em_curso"] .barra i { background: var(--c-curso); }
+.celula[data-sit="nao_iniciado"] { background: var(--c-zero-soft); color: var(--c-zero); }
+
+.celulaGlobal .valor { font-weight: 800; font-size: 14px; }
+
+/* ---------- legenda ---------- */
+.legenda {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.legenda > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.legenda b { color: var(--ink); }
+.item[data-sit="concluido"] { color: var(--c-ok); }
+.item[data-sit="em_curso"] { color: var(--c-curso); }
+.legenda p { margin: 8px 0 0; max-width: 90ch; }
+
+@media (max-width: 900px) {
+  .resumo {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "global" "lotes" "contagens";
+  }
+  .cRtu,
+  .cEntradas { display: none; }
+}
+
+@media (max-width: 560px) {
+  .topo h1 { font-size: 28px; }
+  .lotes { grid-template-columns: minmax(0, 1fr); }
+  .lote {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  .lote .barraMedia { grid-column: 1 / -1; }
+  .filtros select { flex: 1 1 45%; }
+  .cTipo { display: none; }
+  .cSitio { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+}
