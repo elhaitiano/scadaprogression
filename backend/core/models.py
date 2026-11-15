@@ -440,3 +440,142 @@ class Evento(models.Model):
 
     def __str__(self):
         return f"{self.data:%d/%m/%Y} · {self.titulo}"
+
+# ================= Meios (viaturas, ferramentas/instrumentos, equipamento pesado) =================
+# Lógica inspirada no SHERT: um meio concreto, o seu estado operacional, as afectações por período
+# e, quando não há nenhum disponível, um pedido externo identificado pela referência da PO.
+# O material (consumíveis) não entra aqui: é gerido no armazém (proagua-armazem.online).
+
+class Meio(models.Model):
+    class Tipo(models.TextChoices):
+        VIATURA = "viatura", "Viatura"
+        FERRAMENTA = "ferramenta", "Ferramenta / instrumento"
+        PESADO = "pesado", "Equipamento pesado"
+
+    class Propriedade(models.TextChoices):
+        PROPRIO = "proprio", "Próprio (SUEZ)"
+        EPAL = "epal", "EPAL"
+        ALUGADO = "alugado", "Alugado (PO)"
+        OUTRO = "outro", "Outro"
+
+    class Estado(models.TextChoices):
+        OPERACIONAL = "operacional", "Operacional"
+        LIMITADO = "limitado", "Utilização limitada"
+        MANUTENCAO = "manutencao", "Em manutenção"
+        AVARIADO = "avariado", "Avariado"
+
+    USAVEIS = ("operacional", "limitado")
+
+    codigo = models.CharField("Código", max_length=40, unique=True, help_text="Ex.: VTR-01, CAL-4-20-02")
+    nome = models.CharField(max_length=120, help_text="Ex.: Toyota Hilux, Calibrador 4-20 mA")
+    tipo = models.CharField(max_length=10, choices=Tipo.choices)
+    propriedade = models.CharField(max_length=8, choices=Propriedade.choices, default=Propriedade.PROPRIO)
+    marca = models.CharField(max_length=60, blank=True)
+    modelo = models.CharField(max_length=60, blank=True)
+    matricula = models.CharField("Matrícula", max_length=30, blank=True)
+    numero_serie = models.CharField("Número de série", max_length=60, blank=True)
+    responsavel = models.ForeignKey(Pessoa, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name="meios_responsavel", help_text="Quem guarda o meio")
+    estado = models.CharField("Estado operacional", max_length=11, choices=Estado.choices,
+                              default=Estado.OPERACIONAL)
+    activo = models.BooleanField(default=True, help_text="Desmarcar quando sai do parque (ex.: alugado devolvido)")
+    fornecedor = models.CharField(max_length=120, blank=True)
+    po_referencia = models.CharField("Referência da PO", max_length=60, blank=True)
+    notas = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    actualizado_em = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["tipo", "nome", "codigo"]
+        verbose_name = "meio"
+
+    def __str__(self):
+        return f"{self.codigo} · {self.nome}"
+
+    @property
+    def usavel(self):
+        return self.activo and self.estado in self.USAVEIS
+
+
+class Alocacao(models.Model):
+    """Um meio afectado a uma tarefa do planeamento OU a um evento da agenda, durante um período.
+    Sem horas = dias inteiros; com horas = um só dia."""
+
+    meio = models.ForeignKey(Meio, on_delete=models.PROTECT, related_name="alocacoes")
+    tarefa = models.ForeignKey(Tarefa, null=True, blank=True, on_delete=models.CASCADE, related_name="alocacoes")
+    evento = models.ForeignKey("Evento", null=True, blank=True, on_delete=models.CASCADE, related_name="alocacoes")
+    pessoa = models.ForeignKey(Pessoa, null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="alocacoes", help_text="Quem vai usar o meio")
+    data_inicio = models.DateField()
+    data_fim = models.DateField()
+    hora_inicio = models.TimeField(null=True, blank=True)
+    hora_fim = models.TimeField(null=True, blank=True)
+    notas = models.CharField(max_length=200, blank=True)
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="+")
+    criado_em = models.DateTimeField(auto_now_add=True)
+    actualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["data_inicio", "hora_inicio", "id"]
+        verbose_name = "afectação de meio"
+        verbose_name_plural = "afectações de meios"
+        constraints = [
+            models.CheckConstraint(
+                condition=(models.Q(tarefa__isnull=False, evento__isnull=True)
+                           | models.Q(tarefa__isnull=True, evento__isnull=False)),
+                name="alocacao_tarefa_ou_evento"),
+            models.CheckConstraint(condition=models.Q(data_fim__gte=models.F("data_inicio")),
+                                   name="alocacao_periodo_valido"),
+        ]
+
+    def __str__(self):
+        return f"{self.meio} · {self.data_inicio:%d/%m}"
+
+
+class PedidoMeio(models.Model):
+    """Pedido de um meio que não existe ou não está disponível. O programa não trata a PR/PO:
+    guarda apenas a referência da PO e acompanha a chegada e a devolução."""
+
+    class Estado(models.TextChoices):
+        PEDIDO = "pedido", "A aguardar PO"
+        ENCOMENDADO = "encomendado", "PO emitida"
+        CHEGOU = "chegou", "Chegou"
+        DEVOLVIDO = "devolvido", "Devolvido"
+        ANULADO = "anulado", "Anulado"
+
+    tipo = models.CharField(max_length=10, choices=Meio.Tipo.choices)
+    descricao = models.CharField("Descrição", max_length=160, help_text="Ex.: Viatura 4x4 com caixa aberta")
+    data_inicio = models.DateField("Necessário de")
+    data_fim = models.DateField("Até")
+    tarefa = models.ForeignKey(Tarefa, null=True, blank=True, on_delete=models.SET_NULL, related_name="pedidos_meios")
+    evento = models.ForeignKey("Evento", null=True, blank=True, on_delete=models.SET_NULL, related_name="pedidos_meios")
+    pessoa = models.ForeignKey(Pessoa, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    estado = models.CharField(max_length=11, choices=Estado.choices, default=Estado.PEDIDO)
+    po_referencia = models.CharField("Referência da PO", max_length=60, blank=True)
+    fornecedor = models.CharField(max_length=120, blank=True)
+    meio = models.ForeignKey(Meio, null=True, blank=True, on_delete=models.SET_NULL, related_name="pedidos",
+                             help_text="Criado quando o meio chega")
+    chegou_em = models.DateField(null=True, blank=True)
+    devolvido_em = models.DateField(null=True, blank=True)
+    notas = models.TextField(blank=True)
+    solicitado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                       on_delete=models.SET_NULL, related_name="+")
+    criado_em = models.DateTimeField(auto_now_add=True)
+    actualizado_em = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-criado_em"]
+        verbose_name = "pedido de meio"
+        verbose_name_plural = "pedidos de meios"
+        constraints = [
+            models.CheckConstraint(condition=models.Q(data_fim__gte=models.F("data_inicio")),
+                                   name="pedidomeio_periodo_valido"),
+        ]
+
+    def __str__(self):
+        return f"{self.descricao} ({self.get_estado_display()})"

@@ -280,7 +280,8 @@ class AgendaViewSet(viewsets.ViewSet):
         itens = []
 
         if tipo in (None, "", "reuniao", "visita", "prazo"):
-            todos = list(eventos_no_intervalo(desde, ate).select_related("sitio", "tarefa").prefetch_related("participantes"))
+            todos = list(eventos_no_intervalo(desde, ate).select_related("sitio", "tarefa")
+                         .prefetch_related("participantes", "alocacoes__meio"))
             # os conflitos olham para todos os eventos, mesmo os que os filtros escondem
             conflitos = calcular_conflitos(todos, desde, ate)
             for e in todos:
@@ -305,12 +306,14 @@ class AgendaViewSet(viewsets.ViewSet):
                         "tarefa": e.tarefa_id,
                         "tarefa_nome": f"{e.tarefa.localizacao} — {e.tarefa.descricao}" if e.tarefa else None,
                         "conflitos": conf,
+                        "meios": sorted({a.meio.codigo for a in e.alocacoes.all()
+                                         if a.data_inicio <= d + timedelta(days=duracao) and a.data_fim >= d}),
                     })
 
         if tipo in (None, "", "tarefa") and p.get("tarefas") != "0":
             ta = (Tarefa.objects.filter(inicio__isnull=False, inicio__lte=ate)
                   .filter(Q(fim__gte=desde) | Q(fim__isnull=True, inicio__gte=desde))
-                  .select_related("sitio", "seccao").prefetch_related("equipa"))
+                  .select_related("sitio", "seccao").prefetch_related("equipa", "alocacoes__meio"))
             if pessoa_id:
                 ta = ta.filter(equipa=pessoa_id)
             if sitio:
@@ -326,6 +329,8 @@ class AgendaViewSet(viewsets.ViewSet):
                     "estado": estado(t), "progresso": t.progresso, "seccao": t.seccao.nome,
                     "equipa_texto": texto_equipa(t), "serie": False, "tarefa": None, "tarefa_nome": None,
                     "conflitos": [],
+                    "meios": sorted({a.meio.codigo for a in t.alocacoes.all()
+                                     if a.data_inicio <= ate and a.data_fim >= desde}),
                 })
 
         itens.sort(key=lambda i: (i["data"], i["hora_inicio"] is not None, i["hora_inicio"] or "", i["origem"] != "evento"))
