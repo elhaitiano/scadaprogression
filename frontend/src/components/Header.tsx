@@ -22,7 +22,7 @@ export default function Header() {
         </Link>
         <nav className="tabs">
           <Link href="/projecto" aria-current={pathname.startsWith("/projecto") ? "page" : undefined}>Projecto</Link>
-          <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>Estado RTU</Link>
+          <Link href="/painel" aria-current={pathname === "/painel" ? "page" : undefined}>Estado RTU</Link>
           <Link href="/planeamento" aria-current={pathname.startsWith("/planeamento") ? "page" : undefined}>
             Planeamento
           </Link>

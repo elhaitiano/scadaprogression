@@ -1,6 +1,6 @@
 from rest_framework.routers import DefaultRouter
 
-from . import elementos, views
+from . import agenda, elementos, views
 
 router = DefaultRouter()
 router.register("seccoes", views.SeccaoViewSet, basename="seccao")
@@ -17,5 +17,7 @@ router.register("obstaculos", views.ObstaculoViewSet, basename="obstaculo")
 # router.register("painel", views.PainelViewSet, basename="painel")
 router.register("elementos", elementos.ElementoViewSet, basename="elemento")
 router.register("dashboard", elementos.DashboardViewSet, basename="dashboard")
+router.register("eventos", agenda.EventoViewSet, basename="evento")
+router.register("agenda", agenda.AgendaViewSet, basename="agenda")
 
 urlpatterns = router.urls
