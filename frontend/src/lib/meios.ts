@@ -5,12 +5,30 @@ export type EstadoMeio = "operacional" | "limitado" | "manutencao" | "avariado";
 export type Propriedade = "proprio" | "epal" | "alugado" | "outro";
 export type EstadoPedido = "pedido" | "encomendado" | "chegou" | "devolvido" | "anulado";
 
+/** Tipo do catálogo (Grua, Camião basculante, Calibrador 4-20 mA…). */
+export interface TipoCatalogo {
+  id: number;
+  nome: string;
+  categoria: TipoMeio;
+  categoria_nome: string;
+  unidade: string;          // unidade da capacidade ("t", "m³", "kVA"…); vazio = sem capacidade
+  descricao: string;
+  activo: boolean;
+  ordem: number;
+  meios: number;
+}
+
 export interface Meio {
   id: number;
   codigo: string;
   nome: string;
   tipo: TipoMeio;
   tipo_nome: string;
+  tipo_meio: number | null;
+  tipo_meio_nome: string | null;
+  capacidade: string | null;
+  unidade: string;
+  capacidade_texto: string;
   propriedade: Propriedade;
   propriedade_nome: string;
   marca: string;
@@ -31,7 +49,7 @@ export interface Meio {
 }
 
 export interface Motivo {
-  tipo: "inactivo" | "estado" | "alocado";
+  tipo: "inactivo" | "estado" | "alocado" | "capacidade";
   texto: string;
   alocacao?: number;
 }
@@ -42,6 +60,9 @@ export interface MeioDisponivel {
   nome: string;
   tipo: TipoMeio;
   tipo_nome: string;
+  tipo_meio: number | null;
+  tipo_meio_nome: string | null;
+  capacidade_texto: string;
   propriedade: Propriedade;
   matricula: string;
   disponivel: boolean;
@@ -71,6 +92,11 @@ export interface PedidoMeio {
   id: number;
   tipo: TipoMeio;
   tipo_nome: string;
+  tipo_meio: number | null;
+  tipo_meio_nome: string | null;
+  capacidade_minima: string | null;
+  unidade: string;
+  capacidade_texto: string;
   descricao: string;
   data_inicio: string;
   data_fim: string;
@@ -128,3 +154,9 @@ export const ESTADOS_PEDIDO: { id: EstadoPedido; nome: string }[] = [
   { id: "devolvido", nome: "Devolvido" },
   { id: "anulado", nome: "Anulado" },
 ];
+
+/** Texto de um meio para listas: "GRU-20 · Grua Liebherr · Grua 20 t". */
+export function descricaoMeio(m: { codigo: string; nome: string; tipo_meio_nome?: string | null; capacidade_texto?: string }): string {
+  const tipo = [m.tipo_meio_nome, m.capacidade_texto].filter(Boolean).join(" ");
+  return [m.codigo, m.nome, tipo && tipo !== m.nome ? tipo : ""].filter(Boolean).join(" · ");
+}

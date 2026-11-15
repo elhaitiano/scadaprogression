@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import { useAuth } from "@/components/AuthProvider";
 import { api, ApiError } from "@/lib/api";
 import {
-  ESTADOS_PEDIDO, TIPOS_MEIO, type Meio, type PedidoMeio, type TipoMeio,
+  ESTADOS_PEDIDO, TIPOS_MEIO, type Meio, type PedidoMeio, type TipoCatalogo, type TipoMeio,
 } from "@/lib/meios";
 import { lista, type Pessoa, type RespostaLista } from "@/lib/planeamento";
 import DialogoMeio from "./DialogoMeio";
@@ -24,10 +24,12 @@ function erroTexto(e: unknown): string {
 
 // ---------------------------------------------------------------- parque
 
-function Parque({ podeEditar, podeEliminar, pessoas }: { podeEditar: boolean; podeEliminar: boolean; pessoas: Pessoa[] }) {
+function Parque({ podeEditar, podeEliminar, pessoas, tipos }: {
+  podeEditar: boolean; podeEliminar: boolean; pessoas: Pessoa[]; tipos: TipoCatalogo[];
+}) {
   const [meios, setMeios] = useState<Meio[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [tipo, setTipo] = useState<"" | TipoMeio>("");
+  const [tipo, setTipo] = useState(""); // "c:pesado" = categoria · "123" = tipo do catálogo
   const [q, setQ] = useState("");
   const [inactivos, setInactivos] = useState(false);
   const [aberto, setAberto] = useState<{ meio: Meio | null } | null>(null);
@@ -42,8 +44,8 @@ function Parque({ podeEditar, podeEliminar, pessoas }: { podeEditar: boolean; po
 
   const visiveis = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return (meios ?? []).filter((m) => (!tipo || m.tipo === tipo)
-      && (!t || `${m.codigo} ${m.nome} ${m.matricula} ${m.marca} ${m.modelo} ${m.po_referencia}`.toLowerCase().includes(t)));
+    return (meios ?? []).filter((m) => (!tipo || (tipo.startsWith("c:") ? m.tipo === tipo.slice(2) : String(m.tipo_meio) === tipo))
+      && (!t || `${m.codigo} ${m.nome} ${m.matricula} ${m.marca} ${m.modelo} ${m.po_referencia} ${m.tipo_meio_nome ?? ""}`.toLowerCase().includes(t)));
   }, [meios, tipo, q]);
 
   const resumo = useMemo(() => {
@@ -67,9 +69,14 @@ function Parque({ podeEditar, podeEliminar, pessoas }: { podeEditar: boolean; po
       <div className={s.filtros}>
         <input type="search" placeholder="Procurar código, nome, matrícula, PO…" value={q} onChange={(e) => setQ(e.target.value)}
                aria-label="Procurar" />
-        <select value={tipo} onChange={(e) => setTipo(e.target.value as TipoMeio)} aria-label="Tipo">
+        <select value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Tipo">
           <option value="">Todos os tipos</option>
-          {TIPOS_MEIO.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          {TIPOS_MEIO.map((c) => (
+            <optgroup key={c.id} label={c.nome}>
+              <option value={`c:${c.id}`}>Todos: {c.nome.toLowerCase()}</option>
+              {tipos.filter((x) => x.categoria === c.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
+            </optgroup>
+          ))}
         </select>
         <label className={s.check}>
           <input type="checkbox" checked={inactivos} onChange={(e) => setInactivos(e.target.checked)} /> Mostrar os que saíram do parque
@@ -91,7 +98,10 @@ function Parque({ podeEditar, podeEliminar, pessoas }: { podeEditar: boolean; po
                 <tr key={m.id} onClick={() => setAberto({ meio: m })} data-activo={m.activo}>
                   <td><b>{m.codigo}</b></td>
                   <td>{m.nome}<small>{[m.marca, m.modelo, m.propriedade !== "proprio" ? m.propriedade_nome : "", m.po_referencia && `PO ${m.po_referencia}`].filter(Boolean).join(" · ")}</small></td>
-                  <td><span className={s.tipo} data-tipo={m.tipo}>{m.tipo_nome}</span></td>
+                  <td>
+                    <span className={s.tipo} data-tipo={m.tipo}>{m.tipo_meio_nome ?? m.tipo_nome}</span>
+                    {m.capacidade_texto && <b className={s.capacidade}>{m.capacidade_texto}</b>}
+                  </td>
                   <td>{m.matricula || m.numero_serie || "—"}</td>
                   <td><span className={s.estado} data-estado={m.activo ? m.estado : "inactivo"}>{m.activo ? m.estado_nome : "Fora do parque"}</span></td>
                   <td>{m.responsavel_nome ?? "—"}</td>
@@ -109,7 +119,7 @@ function Parque({ podeEditar, podeEliminar, pessoas }: { podeEditar: boolean; po
 
       {aberto && (
         <DialogoMeio key={aberto.meio?.id ?? "novo"} meio={aberto.meio} podeEditar={podeEditar} podeEliminar={podeEliminar}
-                     pessoas={pessoas} onFechar={() => setAberto(null)}
+                     pessoas={pessoas} tipos={tipos} onFechar={() => setAberto(null)}
                      onGuardado={() => { setAberto(null); carregar(); }} />
       )}
     </>
@@ -125,6 +135,7 @@ function CartaoPedido({ p, podeEditar, onMudou }: { p: PedidoMeio; podeEditar: b
   const [codigo, setCodigo] = useState(`ALUG-${p.po_referencia}`);
   const [nome, setNome] = useState(p.descricao);
   const [matricula, setMatricula] = useState("");
+  const [capacidade, setCapacidade] = useState(p.capacidade_minima ? String(Number(p.capacidade_minima)).replace(".", ",") : "");
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -148,7 +159,8 @@ function CartaoPedido({ p, podeEditar, onMudou }: { p: PedidoMeio; podeEditar: b
       <div className={s.pedidoCab}>
         <span className={s.estadoPedido} data-estado={p.estado}>{p.estado_nome}</span>
         <b>{p.descricao}</b>
-        <span className={s.tipo} data-tipo={p.tipo}>{p.tipo_nome}</span>
+        <span className={s.tipo} data-tipo={p.tipo}>{p.tipo_meio_nome ?? p.tipo_nome}</span>
+        {p.capacidade_texto && <b className={s.capacidade}>{p.capacidade_texto}</b>}
         <span className={s.periodo}>{fmt(p.data_inicio)} → {fmt(p.data_fim)}</span>
       </div>
       <p className={s.pedidoInfo}>
@@ -177,9 +189,13 @@ function CartaoPedido({ p, podeEditar, onMudou }: { p: PedidoMeio; podeEditar: b
           <label>Código no parque <input type="text" value={codigo} onChange={(e) => setCodigo(e.target.value)} /></label>
           <label>Nome <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} /></label>
           <label>Matrícula <input type="text" value={matricula} onChange={(e) => setMatricula(e.target.value)} /></label>
+          {p.unidade && (
+            <label>Capacidade ({p.unidade}) <input type="text" inputMode="decimal" size={6} value={capacidade}
+                                                   onChange={(e) => setCapacidade(e.target.value)} /></label>
+          )}
           <label>Chegou em <input type="date" value={data} onChange={(e) => setData(e.target.value)} /></label>
           <button type="button" className={s.btnNovo}
-                  onClick={() => correr(`/pedidos-meios/${p.id}/chegou/`, { codigo, nome, matricula, data })}>Confirmar chegada</button>
+                  onClick={() => correr(`/pedidos-meios/${p.id}/chegou/`, { codigo, nome, matricula, data, capacidade: capacidade.replace(",", ".") })}>Confirmar chegada</button>
           <button type="button" className="btn" onClick={() => setModo("")}>Cancelar</button>
         </div>
       )}
@@ -256,6 +272,79 @@ function Pedidos({ podeEditar }: { podeEditar: boolean }) {
   );
 }
 
+// ---------------------------------------------------------------- catálogo de tipos
+
+function LinhaTipo({ t: tp, admin, onMudou }: { t: TipoCatalogo | null; admin: boolean; onMudou: () => void }) {
+  const [f, setF] = useState({
+    nome: tp?.nome ?? "", categoria: (tp?.categoria ?? "pesado") as TipoMeio, unidade: tp?.unidade ?? "",
+    descricao: tp?.descricao ?? "", activo: tp?.activo ?? true,
+  });
+  const [erro, setErro] = useState<string | null>(null);
+  const mudou = !tp || f.nome !== tp.nome || f.categoria !== tp.categoria || f.unidade !== tp.unidade
+    || f.descricao !== tp.descricao || f.activo !== tp.activo;
+
+  async function gravar() {
+    setErro(null);
+    try {
+      await api(tp ? `/tipos-meios/${tp.id}/` : "/tipos-meios/", { method: tp ? "PATCH" : "POST", body: JSON.stringify(f) });
+      if (!tp) setF({ nome: "", categoria: f.categoria, unidade: "", descricao: "", activo: true });
+      onMudou();
+    } catch (e) {
+      setErro(erroTexto(e));
+    }
+  }
+
+  if (!admin) {
+    return tp ? (
+      <tr data-activo={tp.activo}>
+        <td><b>{tp.nome}</b></td><td>{tp.categoria_nome}</td><td>{tp.unidade || "—"}</td><td>{tp.descricao || "—"}</td>
+        <td>{tp.meios}</td><td>{tp.activo ? "Sim" : "Não"}</td><td />
+      </tr>
+    ) : null;
+  }
+  return (
+    <tr data-activo={f.activo} className={tp ? undefined : s.linhaNova}>
+      <td><input type="text" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} placeholder={tp ? "" : "Novo tipo…"} aria-label="Nome" /></td>
+      <td>
+        <select value={f.categoria} onChange={(e) => setF({ ...f, categoria: e.target.value as TipoMeio })} aria-label="Categoria">
+          {TIPOS_MEIO.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+      </td>
+      <td><input type="text" size={6} value={f.unidade} onChange={(e) => setF({ ...f, unidade: e.target.value })} placeholder="t, m³…" aria-label="Unidade" /></td>
+      <td><input type="text" value={f.descricao} onChange={(e) => setF({ ...f, descricao: e.target.value })} placeholder="ex.: Capacidade de elevação" aria-label="Descrição da capacidade" /></td>
+      <td>{tp?.meios ?? "—"}</td>
+      <td>{tp && <input type="checkbox" checked={f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked })} aria-label="Activo" />}</td>
+      <td>
+        {mudou && f.nome.trim() && <button type="button" className={s.btnNovo} onClick={gravar}>{tp ? "Guardar" : "Acrescentar"}</button>}
+        {erro && <span className={s.erroLinha}>{erro}</span>}
+      </td>
+    </tr>
+  );
+}
+
+function Catalogo({ admin, tipos, onMudou }: { admin: boolean; tipos: TipoCatalogo[]; onMudou: () => void }) {
+  return (
+    <>
+      <p className={s.explica}>
+        Tipos de meios e a unidade em que se mede a capacidade (toneladas de uma grua, m³ de um balde, kVA de um
+        gerador…). {admin ? "Só o Administrador acrescenta ou altera tipos. Um tipo com meios não se elimina: desactive-o."
+          : "Só o Administrador pode acrescentar ou alterar tipos."}
+      </p>
+      <div className={s.quadro}>
+        <table className={`${s.tabela} ${s.tabelaTipos}`}>
+          <thead>
+            <tr><th>Tipo</th><th>Categoria</th><th>Unidade</th><th>Capacidade significa</th><th>Meios</th><th>Activo</th><th /></tr>
+          </thead>
+          <tbody>
+            {tipos.map((tp) => <LinhaTipo key={`${tp.id}-${tp.nome}-${tp.activo}-${tp.unidade}`} t={tp} admin={admin} onMudou={onMudou} />)}
+            {admin && <LinhaTipo key={`novo-${tipos.length}`} t={null} admin onMudou={onMudou} />}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------- página
 
 function Conteudo() {
@@ -265,8 +354,14 @@ function Conteudo() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const aba = params.get("aba") === "pedidos" ? "pedidos" : "parque";
+  const aba = (["pedidos", "tipos"] as const).find((x) => x === params.get("aba")) ?? "parque";
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [tipos, setTipos] = useState<TipoCatalogo[]>([]);
+
+  const carregarTipos = useCallback(() => {
+    api<TipoCatalogo[]>("/tipos-meios/").then(setTipos).catch(() => setTipos([]));
+  }, []);
+  useEffect(() => { carregarTipos(); }, [carregarTipos]);
 
   useEffect(() => {
     api<RespostaLista<Pessoa>>("/pessoas/")
@@ -285,10 +380,11 @@ function Conteudo() {
       <div className={s.abas} role="tablist">
         <button type="button" role="tab" aria-selected={aba === "parque"} onClick={() => router.replace(pathname)}>Parque</button>
         <button type="button" role="tab" aria-selected={aba === "pedidos"} onClick={() => router.replace(`${pathname}?aba=pedidos`)}>Pedidos externos</button>
+        <button type="button" role="tab" aria-selected={aba === "tipos"} onClick={() => router.replace(`${pathname}?aba=tipos`)}>Tipos</button>
       </div>
-      {aba === "parque"
-        ? <Parque podeEditar={podeEditar} podeEliminar={podeEliminar} pessoas={pessoas} />
-        : <Pedidos podeEditar={podeEditar} />}
+      {aba === "parque" && <Parque podeEditar={podeEditar} podeEliminar={podeEliminar} pessoas={pessoas} tipos={tipos} />}
+      {aba === "pedidos" && <Pedidos podeEditar={podeEditar} />}
+      {aba === "tipos" && <Catalogo admin={podeEliminar} tipos={tipos} onMudou={carregarTipos} />}
       <p className={s.nota}>
         O material (cabos, sensores, consumíveis) é gerido no armazém e não entra aqui. Para afectar um meio, abra a
         tarefa no Planeamento ou a visita na Agenda.

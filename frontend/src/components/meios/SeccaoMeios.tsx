@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import {
-  TIPOS_MEIO, type Alocacao, type MeioDisponivel, type PedidoMeio, type TipoMeio,
+  TIPOS_MEIO, descricaoMeio, type Alocacao, type MeioDisponivel, type PedidoMeio, type TipoCatalogo, type TipoMeio,
 } from "@/lib/meios";
 import s from "./meios.module.css";
 
@@ -33,6 +33,9 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
   const [pedidos, setPedidos] = useState<PedidoMeio[]>([]);
   const [aberto, setAberto] = useState(false);
   const [tipo, setTipo] = useState<TipoMeio>("viatura");
+  const [tipos, setTipos] = useState<TipoCatalogo[]>([]);
+  const [tipoMeio, setTipoMeio] = useState("");      // "" = qualquer tipo da categoria
+  const [capMin, setCapMin] = useState("");
   const [ini, setIni] = useState(dataFixa ?? inicio);
   const [fi, setFi] = useState(dataFixa ?? fim);
   const [comHoras, setComHoras] = useState(Boolean(horaInicio) && (dataFixa ? true : inicio === fim));
@@ -49,6 +52,9 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
   const [aGravar, setAGravar] = useState(false);
 
   const filtro = `${alvo.tipo}=${alvo.id}`;
+  const tipoEscolhido = tipos.find((x) => String(x.id) === tipoMeio);
+  const unidade = tipoEscolhido?.unidade ?? "";
+  const capNum = unidade && capMin.trim() ? Number(capMin.replace(",", ".")) : null;
   const umDia = ini === fi;
 
   const carregar = useCallback(async () => {
@@ -68,11 +74,18 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
     carregar();
   }, [carregar]);
 
+  useEffect(() => {
+    if (!aberto || tipos.length) return;
+    api<TipoCatalogo[]>("/tipos-meios/?activos=1").then(setTipos).catch(() => setTipos([]));
+  }, [aberto, tipos.length]);
+
   // meios do tipo escolhido, com disponibilidade no período escolhido
   useEffect(() => {
     if (!aberto || !ini || !fi || fi < ini) return;
     let cancelado = false;
     const q = new URLSearchParams({ desde: ini, ate: fi, tipo });
+    if (tipoMeio) q.set("tipo_meio", tipoMeio);
+    if (capNum && capNum > 0) q.set("capacidade_min", String(capNum));
     if (umDia && comHoras) {
       q.set("hora_inicio", hi);
       q.set("hora_fim", hf);
@@ -87,7 +100,7 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
         .catch(() => !cancelado && setDisp([]));
     }, 250);
     return () => { cancelado = true; clearTimeout(t); };
-  }, [aberto, tipo, ini, fi, umDia, comHoras, hi, hf]);
+  }, [aberto, tipo, tipoMeio, capNum, ini, fi, umDia, comHoras, hi, hf]);
 
   function abrir() {
     setAberto(true);
@@ -131,7 +144,9 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
         method: "POST",
         body: JSON.stringify({
           tipo,
-          descricao: descricao.trim() || TIPOS_MEIO.find((t) => t.id === tipo)?.nome,
+          tipo_meio: tipoMeio ? Number(tipoMeio) : null,
+          capacidade_minima: capNum && capNum > 0 ? capNum : null,
+          descricao: descricao.trim() || descricaoPadrao,
           data_inicio: ini,
           data_fim: fi,
           [alvo.tipo]: alvo.id,
@@ -165,6 +180,8 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
   }
 
   const livres = (disp ?? []).filter((m) => m.disponivel);
+  const descricaoPadrao = [tipoEscolhido?.nome ?? TIPOS_MEIO.find((x) => x.id === tipo)?.nome,
+    capNum && capNum > 0 ? `≥ ${String(capNum).replace(".", ",")} ${unidade}` : ""].filter(Boolean).join(" ");
   const nomeTipo = TIPOS_MEIO.find((t) => t.id === tipo)?.nome.toLowerCase();
 
   return (
@@ -214,8 +231,24 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
         <div className={s.form}>
           <div className={s.segmento} role="group" aria-label="Tipo de meio">
             {TIPOS_MEIO.map((t) => (
-              <button key={t.id} type="button" aria-pressed={tipo === t.id} onClick={() => setTipo(t.id)}>{t.nome}</button>
+              <button key={t.id} type="button" aria-pressed={tipo === t.id}
+                      onClick={() => { setTipo(t.id); setTipoMeio(""); setCapMin(""); }}>{t.nome}</button>
             ))}
+          </div>
+
+          <div className={s.linha}>
+            <label>Tipo
+              <select value={tipoMeio} onChange={(e) => { setTipoMeio(e.target.value); setCapMin(""); }}>
+                <option value="">Qualquer</option>
+                {tipos.filter((x) => x.categoria === tipo).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
+              </select>
+            </label>
+            {unidade && (
+              <label>Capacidade mínima
+                <input type="text" inputMode="decimal" size={6} value={capMin} onChange={(e) => setCapMin(e.target.value)}
+                       placeholder={unidade} /> {unidade}
+              </label>
+            )}
           </div>
 
           <div className={s.linha}>
@@ -257,14 +290,16 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
                   <input type="radio" name="meio" disabled={!m.disponivel} checked={escolhido === m.id}
                          onChange={() => setEscolhido(m.id)} />
                   <span>
-                    <b>{m.codigo}</b> {m.nome}{m.matricula ? ` · ${m.matricula}` : ""}{m.propriedade === "alugado" ? " · alugado" : ""}
+                    <span><b>{descricaoMeio(m)}</b>{m.matricula ? ` · ${m.matricula}` : ""}{m.propriedade === "alugado" ? " · alugado" : ""}</span>
                     <small>{m.disponivel ? "Disponível" : m.motivos.map((x) => x.texto).join(" · ")}</small>
                   </span>
                 </label>
               ))}
               {disp && !livres.length && (
                 <p className={s.semLivres}>
-                  {tipo === "pesado" ? "Nenhum" : "Nenhuma"} {nomeTipo} disponível neste período.
+                  {tipoEscolhido
+                    ? <>Nenhum meio «{tipoEscolhido.nome}»{capNum ? ` com pelo menos ${capMin} ${unidade}` : ""} disponível neste período.</>
+                    : <>{tipo === "pesado" ? "Nenhum" : "Nenhuma"} {nomeTipo} disponível neste período.</>}
                 </p>
               )}
             </div>
@@ -278,7 +313,7 @@ export default function SeccaoMeios({ alvo, inicio, fim, horaInicio, horaFim, da
               </p>
               <label className={s.linha}>Descrição
                 <input type="text" value={descricao} onChange={(e) => setDescricao(e.target.value)}
-                       placeholder={tipo === "viatura" ? "ex.: Viatura 4x4 com caixa aberta" : "ex.: Calibrador de pressão"} />
+                       placeholder={descricaoPadrao} />
               </label>
               <div className={s.linha}>
                 <label>Referência da PO <input type="text" value={po} onChange={(e) => setPo(e.target.value)} placeholder="opcional" /></label>

@@ -158,7 +158,7 @@
   cursor: pointer;
 }
 
-.opcao span { display: flex; flex-direction: column; }
+.opcao > span { display: flex; flex-direction: column; }
 .opcao small { color: var(--muted); }
 .opcao[data-livre="true"] small { color: var(--green-ink, #4a6600); font-weight: 600; }
 .opcao[data-livre="false"] { opacity: 0.6; cursor: not-allowed; }

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import {
-  ESTADOS_MEIO, PROPRIEDADES, TIPOS_MEIO, type Alocacao, type EstadoMeio, type Meio, type Propriedade, type TipoMeio,
+  ESTADOS_MEIO, PROPRIEDADES, TIPOS_MEIO, type Alocacao, type EstadoMeio, type Meio, type Propriedade,
+  type TipoCatalogo,
 } from "@/lib/meios";
 import type { Pessoa } from "@/lib/planeamento";
 import s from "../planeamento/planeamento.module.css";
@@ -16,16 +17,18 @@ interface Props {
   podeEditar: boolean;
   podeEliminar: boolean;
   pessoas: Pessoa[];
+  tipos: TipoCatalogo[];
   onFechar: () => void;
   onGuardado: () => void;
 }
 
-export default function DialogoMeio({ meio, podeEditar, podeEliminar, pessoas, onFechar, onGuardado }: Props) {
+export default function DialogoMeio({ meio, podeEditar, podeEliminar, pessoas, tipos, onFechar, onGuardado }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [f, setF] = useState({
     codigo: meio?.codigo ?? "",
     nome: meio?.nome ?? "",
-    tipo: (meio?.tipo ?? "viatura") as TipoMeio,
+    tipo_meio: meio?.tipo_meio ? String(meio.tipo_meio) : "",
+    capacidade: meio?.capacidade ? String(Number(meio.capacidade)).replace(".", ",") : "",
     propriedade: (meio?.propriedade ?? "proprio") as Propriedade,
     marca: meio?.marca ?? "",
     modelo: meio?.modelo ?? "",
@@ -55,6 +58,8 @@ export default function DialogoMeio({ meio, podeEditar, podeEliminar, pessoas, o
   }, [meio]);
 
   const so = !podeEditar;
+  const tipoEscolhido = tipos.find((x) => String(x.id) === f.tipo_meio);
+  const unidade = tipoEscolhido?.unidade ?? "";
   function mudar<K extends keyof typeof f>(k: K, v: (typeof f)[K]) {
     setF((x) => ({ ...x, [k]: v }));
     setErros((e) => { const r = { ...e }; delete r[k]; return r; });
@@ -66,13 +71,21 @@ export default function DialogoMeio({ meio, podeEditar, podeEliminar, pessoas, o
     const loc: Erros = {};
     if (!f.codigo.trim()) loc.codigo = ["Indique o código."];
     if (!f.nome.trim()) loc.nome = ["Indique o nome."];
+    if (!f.tipo_meio) loc.tipo_meio = ["Escolha o tipo."];
+    const cap = f.capacidade.trim() ? Number(f.capacidade.replace(",", ".")) : null;
+    if (unidade && cap !== null && !(cap > 0)) loc.capacidade = ["Número maior que zero."];
     setErros(loc);
     if (Object.keys(loc).length) return;
     setAGuardar(true);
     try {
       await api(meio ? `/meios/${meio.id}/` : "/meios/", {
         method: meio ? "PATCH" : "POST",
-        body: JSON.stringify({ ...f, responsavel: f.responsavel ? Number(f.responsavel) : null }),
+        body: JSON.stringify({
+          ...f,
+          tipo_meio: Number(f.tipo_meio),
+          capacidade: unidade && cap !== null ? cap : null,
+          responsavel: f.responsavel ? Number(f.responsavel) : null,
+        }),
       });
       onGuardado();
     } catch (err) {
@@ -107,10 +120,28 @@ export default function DialogoMeio({ meio, podeEditar, podeEliminar, pessoas, o
         <fieldset className={s.dlgCorpo} disabled={so || aGuardar}>
           <div className={s.grelha2}>
             <label className={s.campo}>Tipo
-              <select value={f.tipo} onChange={(e) => mudar("tipo", e.target.value as TipoMeio)}>
-                {TIPOS_MEIO.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              <select value={f.tipo_meio} onChange={(e) => mudar("tipo_meio", e.target.value)} aria-invalid={Boolean(erros.tipo_meio)}>
+                <option value="">— escolher —</option>
+                {TIPOS_MEIO.map((c) => (
+                  <optgroup key={c.id} label={c.nome}>
+                    {tipos.filter((x) => x.categoria === c.id && (x.activo || String(x.id) === f.tipo_meio)).map((x) => (
+                      <option key={x.id} value={x.id}>{x.nome}{x.unidade ? ` (${x.unidade})` : ""}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
+              <E c="tipo_meio" />
+              {meio && !meio.tipo_meio && <span className={s.dica}>Registado antes do catálogo: escolha o tipo.</span>}
             </label>
+            {unidade ? (
+              <label className={s.campo}>Capacidade ({unidade})
+                <input type="text" inputMode="decimal" value={f.capacidade} onChange={(e) => mudar("capacidade", e.target.value)}
+                       placeholder={tipoEscolhido?.descricao || `em ${unidade}`} aria-invalid={Boolean(erros.capacidade)} />
+                <E c="capacidade" />
+              </label>
+            ) : <span />}
+          </div>
+          <div className={s.grelha2}>
             <label className={s.campo}>Propriedade
               <select value={f.propriedade} onChange={(e) => mudar("propriedade", e.target.value as Propriedade)}>
                 {PROPRIEDADES.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
@@ -124,7 +155,7 @@ export default function DialogoMeio({ meio, podeEditar, podeEliminar, pessoas, o
             </label>
             <label className={s.campo}>Nome
               <input type="text" value={f.nome} onChange={(e) => mudar("nome", e.target.value)}
-                     placeholder={f.tipo === "viatura" ? "ex.: Toyota Hilux" : "ex.: Calibrador 4-20 mA"} />
+                     placeholder={tipoEscolhido?.categoria === "pesado" ? "ex.: Grua Liebherr LTM 1050" : tipoEscolhido?.categoria === "ferramenta" ? "ex.: Fluke 707" : "ex.: Toyota Hilux"} />
               <E c="nome" />
             </label>
           </div>
