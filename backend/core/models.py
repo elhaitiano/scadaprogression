@@ -396,6 +396,12 @@ class Evento(models.Model):
         REALIZADO = "realizado", "Realizado"
         CANCELADO = "cancelado", "Cancelado"
 
+    class Repeticao(models.TextChoices):
+        NENHUMA = "", "Não se repete"
+        DIARIA = "diaria", "Todos os dias úteis"
+        SEMANAL = "semanal", "Semanal"
+        MENSAL = "mensal", "Mensal (mesmo dia do mês)"
+
     tipo = models.CharField(max_length=8, choices=Tipo.choices)
     titulo = models.CharField("Título", max_length=160)
     data = models.DateField()
@@ -410,6 +416,13 @@ class Evento(models.Model):
                                               help_text="Ex.: EPAL (Eng. X), SUEZ Digital Solutions")
     descricao = models.TextField("Descrição / ordem de trabalhos", blank=True)
     estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.PREVISTO)
+    # repetição: a série começa em "data"; cada ocorrência tem a mesma hora e os mesmos participantes
+    repeticao = models.CharField("Repetição", max_length=8, choices=Repeticao.choices, blank=True, default="")
+    intervalo = models.PositiveSmallIntegerField(default=1, help_text="De N em N semanas/meses")
+    dias_semana = models.CharField(max_length=13, blank=True,
+                                   help_text="Semanal: dias separados por vírgula, 0 = segunda … 6 = domingo")
+    repetir_ate = models.DateField("Repetir até", null=True, blank=True)
+    excepcoes = models.JSONField("Datas sem ocorrência", default=list, blank=True)
     criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    on_delete=models.SET_NULL, related_name="+")
     criado_em = models.DateTimeField(auto_now_add=True)
