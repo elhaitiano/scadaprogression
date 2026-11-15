@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { nomeSitio, type Pessoa, type Seccao, type SitioResumo, type Tarefa } from "@/lib/planeamento";
+import SeccaoMeios from "@/components/meios/SeccaoMeios";
+import { textoOcupacao, useOcupacao } from "@/components/meios/useOcupacao";
+import m from "@/components/meios/meios.module.css";
 import s from "./planeamento.module.css";
 
 type Erros = Record<string, string[]>;
@@ -74,6 +77,8 @@ export default function DialogoTarefa({
 
   const so = !podeEditar; // só leitura
   const activos = pessoas.filter((p) => p.activo || form.equipa.includes(p.id));
+  // onde já está cada pessoa nestas datas (aviso, não bloqueia)
+  const ocupacao = useOcupacao({ desde: form.inicio, ate: form.fim || form.inicio, excluirTarefa: tarefa?.id });
   const visiveis = activos.filter((p) => p.nome.toLowerCase().includes(filtroEquipa.trim().toLowerCase()));
 
   function mudar<K extends keyof Form>(campo: K, valor: Form[K]) {
@@ -218,6 +223,11 @@ export default function DialogoTarefa({
                 <label key={p.id} className={s.pessoa} data-activo={form.equipa.includes(p.id)}>
                   <input type="checkbox" checked={form.equipa.includes(p.id)} onChange={() => alternarPessoa(p.id)} />
                   {p.nome}
+                  {ocupacao[p.id]?.length > 0 && (
+                    <span className={m.ocupado} title={textoOcupacao(ocupacao[p.id])}>
+                      ocupado{ocupacao[p.id].length > 1 ? ` ×${ocupacao[p.id].length}` : ""}
+                    </span>
+                  )}
                 </label>
               ))}
               {!pessoas.length ? (
@@ -298,6 +308,15 @@ export default function DialogoTarefa({
             </p>
           )}
         </fieldset>
+
+        {tarefa?.inicio ? (
+          <SeccaoMeios alvo={{ tipo: "tarefa", id: tarefa.id }} inicio={tarefa.inicio} fim={tarefa.fim ?? tarefa.inicio}
+                       equipa={pessoas.filter((p) => tarefa.equipa.includes(p.id))} podeEditar={podeEditar} />
+        ) : (
+          <p className={s.dica} style={{ margin: "0 20px 16px" }}>
+            Meios (viaturas, ferramentas…): grave a tarefa com datas para os poder afectar.
+          </p>
+        )}
 
         <footer className={s.dlgRodape}>
           {tarefa && podeEliminar && (

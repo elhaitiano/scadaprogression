@@ -1,0 +1,194 @@
+/* Página Meios: parque e pedidos externos. */
+
+.pagina { padding-block: 20px 48px; }
+
+.topo h1 { font-size: 34px; color: var(--navy); margin-top: 2px; }
+
+.abas { display: flex; gap: 4px; margin: 14px 0 12px; border-bottom: 1px solid var(--line); }
+
+.abas button {
+  padding: 8px 16px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.abas button[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--navy); }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+
+.kpis > div {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kpis b { display: block; font-family: var(--display); font-size: 26px; color: var(--ink); }
+.kpis [data-tom="warn"] b { color: var(--warn); }
+
+.filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+
+.filtros input[type="search"],
+.filtros select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.filtros input[type="search"] { flex: 1 1 240px; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+
+.btnNovo {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  background: var(--navy);
+  color: var(--on-navy);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filtros .btnNovo { margin-left: auto; }
+
+.btnAnular {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--crit);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.erro { padding: 8px 12px; border-radius: 8px; background: var(--crit-soft); color: var(--crit); font-weight: 600; font-size: 13px; }
+.aviso { margin: 4px 0 0; padding: 6px 10px; border-radius: 6px; background: var(--warn-soft); font-size: 12px; }
+.vazio { padding: 32px 16px; text-align: center; color: var(--muted); }
+.dica { font-size: 12px; color: var(--muted); }
+.nota { margin-top: 14px; font-size: 12px; color: var(--muted); }
+.explica { margin: 0 0 12px; max-width: 860px; font-size: 13px; color: var(--muted); }
+
+.quadro {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.tabela th {
+  padding: 8px 12px;
+  background: var(--navy);
+  color: var(--on-navy);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tabela td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tabela tr:last-child td { border-bottom: 0; }
+.tabela tbody tr { cursor: pointer; }
+.tabela tbody tr:hover td { background: var(--surface-2); }
+.tabela tr[data-activo="false"] td { opacity: 0.55; }
+.tabela td small { display: block; color: var(--muted); font-size: 11px; }
+
+.tipo {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--navy-soft);
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+.tipo[data-tipo="ferramenta"] { background: var(--green-soft, #eef8d0); color: var(--green-ink, #4a6600); }
+.tipo[data-tipo="pesado"] { background: var(--warn-soft); color: var(--warn); }
+
+.estado { font-weight: 700; font-size: 12px; color: var(--green-ink, #4a6600); }
+.estado[data-estado="limitado"] { color: var(--warn); }
+.estado[data-estado="manutencao"],
+.estado[data-estado="avariado"] { color: var(--crit); }
+.estado[data-estado="inactivo"] { color: var(--muted); }
+
+.hoje { display: block; font-weight: 600; }
+.livre { color: var(--green-ink, #4a6600); font-weight: 700; }
+
+.calendario {
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.calendario ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* pedidos */
+.kpisLinha { display: flex; flex-wrap: wrap; gap: 6px; margin-right: auto; }
+.pedidos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.pedido {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warn);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.pedido[data-estado="encomendado"] { border-left-color: var(--navy); }
+.pedido[data-estado="chegou"] { border-left-color: var(--green-ink, #4a6600); }
+.pedido[data-estado="devolvido"],
+.pedido[data-estado="anulado"] { border-left-color: var(--line); opacity: 0.7; }
+
+.pedidoCab { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.periodo { margin-left: auto; font-size: 13px; font-weight: 700; color: var(--navy); }
+.pedidoInfo { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+
+.estadoPedido {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--navy-soft);
+  color: var(--navy);
+}
+
+.estadoPedido[data-estado="pedido"] { background: var(--warn-soft); color: var(--warn); }
+.estadoPedido[data-estado="chegou"] { background: var(--green-soft, #eef8d0); color: var(--green-ink, #4a6600); }
+.estadoPedido[data-estado="devolvido"],
+.estadoPedido[data-estado="anulado"] { background: var(--surface-2); color: var(--muted); }
+
+.linhaPo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; font-size: 13px; font-weight: 600; }
+.linhaPo label { display: inline-flex; align-items: center; gap: 6px; }
+
+.linhaPo input {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.accoesPedido { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
+
+@media (max-width: 720px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filtros .btnNovo { margin-left: 0; }
+  .periodo { margin-left: 0; width: 100%; }
+}

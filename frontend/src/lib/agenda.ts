@@ -38,6 +38,7 @@ export interface ItemAgenda {
   tarefa: number | null;        // tarefa do planeamento ligada ao evento
   tarefa_nome: string | null;
   conflitos: Conflito[];        // pessoas ocupadas noutro evento à mesma hora
+  meios: string[];              // códigos dos meios afectados
 }
 
 export interface RespostaAgenda {

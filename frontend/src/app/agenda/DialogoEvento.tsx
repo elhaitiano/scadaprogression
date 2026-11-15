@@ -7,6 +7,9 @@ import {
   type Conflito, type EstadoEvento, type Evento, type Repeticao, type TipoEvento,
 } from "@/lib/agenda";
 import { lista, nomeSitio, type Pessoa, type RespostaLista, type SitioResumo, type Tarefa } from "@/lib/planeamento";
+import SeccaoMeios from "@/components/meios/SeccaoMeios";
+import { textoOcupacao, useOcupacao } from "@/components/meios/useOcupacao";
+import m from "@/components/meios/meios.module.css";
 import s from "../planeamento/planeamento.module.css";
 import a from "./agenda.module.css";
 
@@ -105,6 +108,13 @@ export default function DialogoEvento({
   const comHoras = !prazo && !form.diaInteiro;
   const activos = pessoas.filter((p) => p.activo || form.participantes.includes(p.id));
   const visiveis = activos.filter((p) => p.nome.toLowerCase().includes(filtro.trim().toLowerCase()));
+  const ocupacao = useOcupacao({
+    desde: form.data,
+    ate: form.varios && form.data_fim ? form.data_fim : form.data,
+    horaInicio: comHoras ? form.hora_inicio : null,
+    horaFim: comHoras ? form.hora_fim : null,
+    excluirEvento: evento?.id,
+  });
 
   // tarefas abertas para ligar (as do sítio escolhido, ou todas) + a já ligada
   useEffect(() => {
@@ -442,6 +452,11 @@ export default function DialogoEvento({
                 <label key={p.id} className={s.pessoa} data-activo={form.participantes.includes(p.id)}>
                   <input type="checkbox" checked={form.participantes.includes(p.id)} onChange={() => alternar(p.id)} />
                   {p.nome}
+                  {!prazo && ocupacao[p.id]?.length > 0 && (
+                    <span className={m.ocupado} title={textoOcupacao(ocupacao[p.id])}>
+                      ocupado{ocupacao[p.id].length > 1 ? ` ×${ocupacao[p.id].length}` : ""}
+                    </span>
+                  )}
                 </label>
               ))}
               {!pessoas.length && <span className={s.dica}>A lista de pessoas não carregou.</span>}
@@ -484,6 +499,13 @@ export default function DialogoEvento({
             </p>
           )}
         </fieldset>
+
+        {evento && evento.tipo !== "prazo" && (
+          <SeccaoMeios alvo={{ tipo: "evento", id: evento.id }} inicio={evento.data} fim={evento.data_fim ?? evento.data}
+                       horaInicio={evento.hora_inicio} horaFim={evento.hora_fim}
+                       dataFixa={evento.repeticao ? dataInicial : undefined}
+                       equipa={pessoas.filter((p) => evento.participantes.includes(p.id))} podeEditar={podeEditar} />
+        )}
 
         <footer className={s.dlgRodape}>
           {evento && podeEliminar && (

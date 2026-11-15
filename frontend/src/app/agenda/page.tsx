@@ -63,6 +63,7 @@ function Item({ i, dia, compacto = false, onAbrir, estilo }: {
               .filter(Boolean).join(" · ")}
           </span>
           {i.tarefa_nome && <span className={s.detalhe}>Tarefa: {i.tarefa_nome}</span>}
+          {i.meios?.length > 0 && <span className={s.detalhe}>Meios: {i.meios.join(", ")}</span>}
           {conflito && <span className={s.textoConflito}>{conflito}</span>}
         </>
       )}
