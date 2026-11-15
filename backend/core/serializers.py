@@ -201,9 +201,10 @@ class SitioDetailSerializer(SitioListSerializer):
     plcs = PLCSitioSerializer(many=True, read_only=True)
     obstaculos = ObstaculoSerializer(many=True, read_only=True)
     tarefas_abertas = serializers.SerializerMethodField()
+    sistema_nome = serializers.CharField(source="get_sistema_display", read_only=True)
 
     class Meta(SitioListSerializer.Meta):
-        fields = SitioListSerializer.Meta.fields + ["notas", "actividades", "plcs", "obstaculos",
+        fields = SitioListSerializer.Meta.fields + ["sistema", "sistema_nome", "notas", "actividades", "plcs", "obstaculos",
                                                     "tarefas_abertas"]
 
     def get_tarefas_abertas(self, obj):

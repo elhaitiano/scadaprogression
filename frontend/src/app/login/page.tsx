@@ -21,7 +21,7 @@ function FormularioLogin() {
   // Só aceita destinos internos (evita redireccionar para outro site)
   const destino = (() => {
     const n = params.get("next");
-    return n && n.startsWith("/") && !n.startsWith("//") ? n : "/painel";
+    return n && n.startsWith("/") && !n.startsWith("//") && n !== "/"? n : "/projeto";
   })();
 
   useEffect(() => {

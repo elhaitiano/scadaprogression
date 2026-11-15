@@ -14,13 +14,14 @@ export default function Header() {
   return (
     <header className="topbar">
       <div className="wrap">
-        <Link href="/" className="brand" aria-label="SCADA Progression — início">
+        <Link href="/projecto" className="brand" aria-label="SCADA Progression — início">
           <span className="brand-logo">
             <Image src="/logo-header.png" alt="" width={140} height={60} priority />
           </span>
           <b>SCADA <i>Progression</i></b>
         </Link>
         <nav className="tabs">
+          <Link href="/projecto" aria-current={pathname.startsWith("/projecto") ? "page" : undefined}>Projecto</Link>
           <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>Estado RTU</Link>
           <Link href="/planeamento" aria-current={pathname.startsWith("/planeamento") ? "page" : undefined}>
             Planeamento

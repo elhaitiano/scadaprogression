@@ -1,0 +1,47 @@
+.voltar {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: var(--navy);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.vistas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.vistas button {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vistas button[aria-selected="true"] { background: var(--navy); border-color: var(--navy); color: var(--on-navy); }
+
+.sitio { color: var(--navy) !important; text-decoration: none; }
+.sitio:hover { text-decoration: underline; }
+
+.detalhe { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.accao {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--navy-soft);
+  color: var(--navy);
+}
+
+.accao[data-accao="instalar"],
+.accao[data-accao="substituir"] { background: var(--crit-soft); color: var(--crit); }
+.accao[data-accao="por_definir"] { background: var(--surface-2); color: var(--muted); }
