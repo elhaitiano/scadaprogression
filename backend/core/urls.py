@@ -1,6 +1,7 @@
 from rest_framework.routers import DefaultRouter
+from django.urls import path
 
-from . import agenda, elementos, views
+from . import agenda, elementos, meios, views
 
 router = DefaultRouter()
 router.register("seccoes", views.SeccaoViewSet, basename="seccao")
@@ -19,5 +20,10 @@ router.register("elementos", elementos.ElementoViewSet, basename="elemento")
 router.register("dashboard", elementos.DashboardViewSet, basename="dashboard")
 router.register("eventos", agenda.EventoViewSet, basename="evento")
 router.register("agenda", agenda.AgendaViewSet, basename="agenda")
+router.register("meios", meios.MeioViewSet)
+router.register("alocacoes", meios.AlocacaoViewSet, basename="alocacao")
+router.register("pedidos-meios", meios.PedidoMeioViewSet, basename="pedidomeio")
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("ocupacao/", meios.OcupacaoView.as_view(), name="ocupacao"),
+] +router.urls
