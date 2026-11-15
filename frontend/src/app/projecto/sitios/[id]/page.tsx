@@ -11,6 +11,8 @@ import { lista, type RespostaLista } from "@/lib/planeamento";
 import {
   ACCOES, CATEGORIAS, ESTADOS_FISICOS, montagem, situacaoElemento, type Elemento,
 } from "@/lib/projecto";
+import { diaCurto, horario, type ItemAgenda, type RespostaAgenda } from "@/lib/agenda";
+import { iso, somarDias } from "@/lib/planeamento";
 import NovoElemento from "./NovoElemento";
 import s from "./elementos.module.css";
 
@@ -37,6 +39,17 @@ export default function PaginaElementosSitio() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [novo, setNovo] = useState(false);
   const [filtro, setFiltro] = useState<"" | ReturnType<typeof situacaoElemento>>("");
+
+  const [agenda, setAgenda] = useState<ItemAgenda[] | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    const hoje = new Date();
+    api<RespostaAgenda>(`/agenda/?sitio=${id}&desde=${iso(hoje)}&ate=${iso(somarDias(hoje, 30))}`)
+      .then((r) => !cancelado && setAgenda(r.itens.filter((i) => i.origem === "evento" || i.data >= iso(hoje))))
+      .catch(() => !cancelado && setAgenda([]));
+    return () => { cancelado = true; };
+  }, [id]);
 
   const carregar = useCallback(async () => {
     try {
@@ -186,6 +199,30 @@ export default function PaginaElementosSitio() {
                 ))}
               </div>
             </div>
+
+            <section className={s.agenda} aria-labelledby="t-agenda">
+              <header>
+                <h2 id="t-agenda">Agenda do sítio · próximos 30 dias</h2>
+                <Link href="/agenda">Abrir agenda</Link>
+              </header>
+              {agenda === null ? (
+                <p className={s.semAgenda}>A carregar…</p>
+              ) : !agenda.length ? (
+                <p className={s.semAgenda}>Nada marcado para este sítio. As visitas e reuniões aparecem aqui quando indicam o sítio.</p>
+              ) : (
+                <ul>
+                  {agenda.slice(0, 8).map((i) => (
+                    <li key={i.chave} data-tipo={i.tipo}>
+                      <b>{diaCurto(i.data)}{i.data !== i.data_fim ? ` → ${diaCurto(i.data_fim)}` : ""}</b>
+                      <span className={s.agTipo}>{i.origem === "tarefa" ? "Tarefa" : i.tipo === "reuniao" ? "Reunião" : i.tipo === "visita" ? "Visita" : "Prazo"}</span>
+                      <span>{i.titulo}{i.serie ? " ↻" : ""}</span>
+                      <small>{i.origem === "tarefa" ? `${i.progresso ?? 0}% · ${i.equipa_texto ?? ""}` : `${horario(i)} · ${i.pessoas.join(", ") || "—"}`}</small>
+                    </li>
+                  ))}
+                  {agenda.length > 8 && <li className={s.semAgenda}>… e mais {agenda.length - 8} na agenda.</li>}
+                </ul>
+              )}
+            </section>
 
             <div className={s.barraFiltros}>
               <button type="button" aria-pressed={filtro === ""} onClick={() => setFiltro("")}>Todos <b>{els.length}</b></button>

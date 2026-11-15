@@ -87,6 +87,46 @@
 .fase i em { display: block; height: 100%; background: var(--navy); }
 .fase[data-sit="concluido"] i em { background: var(--c-ok); }
 
+/* ---------- agenda do sítio ---------- */
+.agenda {
+  margin-bottom: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.agenda > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.agenda h2 { font-size: 16px; color: var(--navy); }
+.agenda header a { font-size: 13px; font-weight: 700; color: var(--navy); }
+.agenda ul { list-style: none; margin: 0; padding: 0; }
+
+.agenda li {
+  display: grid;
+  grid-template-columns: 110px 70px minmax(0, 1fr) minmax(0, 260px);
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid var(--navy);
+  font-size: 13px;
+}
+
+.agenda li:last-child { border-bottom: 0; }
+.agenda li[data-tipo="visita"] { border-left-color: var(--green-ink, #4a6600); }
+.agenda li[data-tipo="prazo"] { border-left-color: var(--warn); }
+.agenda li[data-tipo="tarefa"] { border-left-color: var(--muted); }
+.agenda li small { color: var(--muted); }
+.agTipo { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+.semAgenda { margin: 0; padding: 10px 14px; font-size: 13px; color: var(--muted); }
+
 /* ---------- filtros por situação ---------- */
 .barraFiltros {
   display: flex;
@@ -335,6 +375,9 @@
 
 @media (max-width: 820px) {
   .cabecalho { grid-template-columns: minmax(0, 1fr); }
+  .agenda li { grid-template-columns: 90px minmax(0, 1fr); }
+  .agenda li .agTipo { display: none; }
+  .agenda li small { grid-column: 2; }
 }
 
 @media (max-width: 480px) {

@@ -6,7 +6,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { api } from "@/lib/api";
 import {
   DIAS_SEMANA, DIAS_SEMANA_CURTOS, TIPOS, diaCurto, diaLongo, horario, intervalo, iso, mover, nomeMes, ocupaDia,
-  variosDias, type Evento, type ItemAgenda, type RespostaAgenda, type TipoItem, type Vista,
+  minutos, variosDias, type Evento, type ItemAgenda, type RespostaAgenda, type TipoItem, type Vista,
 } from "@/lib/agenda";
 import {
   ESTADOS, lista, semanaIso, type EstadoTarefa, type Pessoa, type RespostaLista, type Seccao, type SitioResumo,
@@ -17,6 +17,7 @@ import DialogoEvento from "./DialogoEvento";
 import s from "./agenda.module.css";
 
 const MAX_CELULA = 4;
+const PX_HORA = 48;
 
 function guardarPref(k: string, v: string) {
   try { localStorage.setItem(`sp_agenda_${k}`, v); } catch { /* sem armazenamento: ignora */ }
@@ -26,8 +27,8 @@ function lerPref(k: string): string | null {
 }
 
 /** Uma linha da agenda (reunião, visita, prazo ou tarefa). */
-function Item({ i, dia, compacto = false, onAbrir }: {
-  i: ItemAgenda; dia?: string; compacto?: boolean; onAbrir: (i: ItemAgenda) => void;
+function Item({ i, dia, compacto = false, onAbrir, estilo }: {
+  i: ItemAgenda; dia?: string; compacto?: boolean; onAbrir: (i: ItemAgenda) => void; estilo?: React.CSSProperties;
 }) {
   const marca = i.origem === "tarefa" && dia
     ? (dia === i.data ? "▶ " : dia === i.data_fim ? "■ " : "")
@@ -35,18 +36,24 @@ function Item({ i, dia, compacto = false, onAbrir }: {
   const quando = i.origem === "tarefa"
     ? `${diaCurto(i.data)} → ${diaCurto(i.data_fim)} · ${i.progresso ?? 0}%`
     : variosDias(i) ? `${diaCurto(i.data)} → ${diaCurto(i.data_fim)}` : horario(i);
+  const conflito = i.conflitos.length
+    ? `Sobreposição: ${i.conflitos.map((c) => `${c.pessoa} também em "${c.com}" (${c.horario})`).join("; ")}`
+    : "";
+  const icones = <>{i.conflitos.length > 0 && <span className={s.alerta} aria-label="Sobreposição">⚠</span>}{i.serie && <span className={s.serie} aria-label="Repete-se">↻</span>}</>;
   return (
     <button type="button" className={compacto ? s.chip : s.item} data-tipo={i.tipo} data-estado={i.estado}
+            data-conflito={i.conflitos.length > 0} style={estilo}
             onClick={(e) => { e.stopPropagation(); onAbrir(i); }}
-            title={`${TIPOS.find((t) => t.id === i.tipo)?.nome} · ${i.titulo} · ${quando}`}>
+            title={[`${TIPOS.find((t) => t.id === i.tipo)?.nome} · ${i.titulo} · ${quando}`, conflito].filter(Boolean).join("\n")}>
       {compacto ? (
         <>
+          {icones}
           {i.hora_inicio && <b>{i.hora_inicio.slice(0, 5)}</b>}
           {marca}{i.titulo}
         </>
       ) : (
         <>
-          <span className={s.quando}>{quando}</span>
+          <span className={s.quando}>{icones}{quando}</span>
           <span className={s.titulo}>{marca}{i.titulo}</span>
           <span className={s.detalhe}>
             {[TIPOS.find((t) => t.id === i.tipo)?.curto,
@@ -55,10 +62,38 @@ function Item({ i, dia, compacto = false, onAbrir }: {
               i.origem === "tarefa" ? ESTADOS[i.estado as EstadoTarefa] : i.estado !== "previsto" ? i.estado : null]
               .filter(Boolean).join(" · ")}
           </span>
+          {i.tarefa_nome && <span className={s.detalhe}>Tarefa: {i.tarefa_nome}</span>}
+          {conflito && <span className={s.textoConflito}>{conflito}</span>}
         </>
       )}
     </button>
   );
+}
+
+/** Distribui eventos que se sobrepõem por colunas lado a lado (como no Outlook). */
+function colunas(evs: ItemAgenda[]): Map<string, { col: number; de: number }> {
+  const r = new Map<string, { col: number; de: number }>();
+  const fimDe = (i: ItemAgenda) => (i.hora_fim ? minutos(i.hora_fim) : minutos(i.hora_inicio) + 60);
+  const ord = [...evs].sort((x, y) => minutos(x.hora_inicio) - minutos(y.hora_inicio) || fimDe(y) - fimDe(x));
+  let grupo: { i: ItemAgenda; col: number }[] = [];
+  let fimCols: number[] = [];       // fim do último evento em cada coluna do grupo
+  let fimGrupo = -1;
+  const fechar = () => {
+    grupo.forEach((g) => r.set(g.i.chave, { col: g.col, de: fimCols.length }));
+    grupo = [];
+    fimCols = [];
+  };
+  for (const i of ord) {
+    const ini = minutos(i.hora_inicio);
+    if (ini >= fimGrupo) fechar();
+    let col = fimCols.findIndex((f) => f <= ini);
+    if (col < 0) { col = fimCols.length; fimCols.push(0); }
+    fimCols[col] = fimDe(i);
+    grupo.push({ i, col });
+    fimGrupo = Math.max(fimGrupo, fimDe(i));
+  }
+  fechar();
+  return r;
 }
 
 export default function PaginaAgenda() {
@@ -79,7 +114,7 @@ export default function PaginaAgenda() {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [sitios, setSitios] = useState<SitioResumo[]>([]);
   const [seccoes, setSeccoes] = useState<Seccao[]>([]);
-  const [evento, setEvento] = useState<{ ev: Evento | null; data: string } | null>(null);
+  const [evento, setEvento] = useState<{ ev: Evento | null; data: string; hora?: string } | null>(null);
   const [tarefa, setTarefa] = useState<Tarefa | null>(null);
 
   // preferências do próprio navegador (vista e "a minha agenda")
@@ -192,43 +227,117 @@ export default function PaginaAgenda() {
     );
   }
 
-  // ---------- vista semana ----------
+  // ---------- vista semana (com horas) ----------
   function vistaSemana() {
     const d0 = iso(dias[0]);
     const d6 = iso(dias[6]);
+    const comHora = eventos.filter((i) => i.hora_inicio && !variosDias(i));
+    const semHora = eventos.filter((i) => !i.hora_inicio || variosDias(i));
+    // 07h–19h por omissão, alargado se houver eventos fora disso
+    const h0 = Math.min(7, ...comHora.map((i) => Math.floor(minutos(i.hora_inicio) / 60)));
+    const h1 = Math.max(19, ...comHora.map((i) => Math.ceil((i.hora_fim ? minutos(i.hora_fim) : minutos(i.hora_inicio) + 60) / 60)));
+    const horas = Array.from({ length: h1 - h0 }, (_, k) => h0 + k);
+    const agora = new Date();
+    const minAgora = agora.getHours() * 60 + agora.getMinutes();
     return (
-      <div className={s.semana}>
-        {dias.map((d, k) => (
-          <div key={iso(d)} className={s.cabSemana} data-hoje={iso(d) === hojeIso} style={{ gridColumn: k + 1, gridRow: 1 }}>
-            <span>{DIAS_SEMANA[k]}</span><b>{d.getDate()}</b>
-          </div>
-        ))}
-        {tarefas.length > 0 && (
-          <div className={s.faixaTarefas} style={{ gridColumn: "1 / -1", gridRow: 2 }}>
-            {tarefas.map((i) => {
-              const ini = i.data < d0 ? 0 : dias.findIndex((d) => iso(d) === i.data);
-              const fim = i.data_fim > d6 ? 6 : dias.findIndex((d) => iso(d) === i.data_fim);
-              return (
-                <div key={i.chave} className={s.barraTarefa} style={{ gridColumn: `${ini + 1} / ${fim + 2}` }}
-                     data-corta-ini={i.data < d0} data-corta-fim={i.data_fim > d6}>
-                  <Item i={i} compacto onAbrir={abrir} />
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {dias.map((d, k) => {
-          const di = iso(d);
-          const evs = eventos.filter((i) => ocupaDia(i, di));
-          return (
-            <div key={di} className={s.colunaDia} style={{ gridColumn: k + 1, gridRow: 3 }} data-hoje={di === hojeIso}
-                 onClick={() => novo(di)}>
-              {evs.map((i) => <Item key={i.chave} i={i} onAbrir={abrir} />)}
-              {!evs.length && podeEditar && <span className={s.dicaVazia}>+ adicionar</span>}
+      <>
+        <div className={s.semana}>
+          <div className={s.canto} style={{ gridColumn: 1, gridRow: 1 }} />
+          {dias.map((d, k) => (
+            <div key={iso(d)} className={s.cabSemana} data-hoje={iso(d) === hojeIso} style={{ gridColumn: k + 2, gridRow: 1 }}>
+              <span>{DIAS_SEMANA[k]}</span><b>{d.getDate()}</b>
             </div>
-          );
-        })}
-      </div>
+          ))}
+
+          <div className={s.rotuloFaixa} style={{ gridColumn: 1, gridRow: 2 }}>Dia inteiro</div>
+          {dias.map((d, k) => {
+            const di = iso(d);
+            const lst = semHora.filter((i) => ocupaDia(i, di));
+            return (
+              <div key={di} className={s.diaInteiro} style={{ gridColumn: k + 2, gridRow: 2 }} data-hoje={di === hojeIso}
+                   onClick={() => novo(di)}>
+                {lst.map((i) => <Item key={i.chave} i={i} compacto onAbrir={abrir} />)}
+              </div>
+            );
+          })}
+
+          {tarefas.length > 0 && (
+            <>
+              <div className={s.rotuloFaixa} style={{ gridColumn: 1, gridRow: 3 }}>Tarefas</div>
+              <div className={s.faixaTarefas} style={{ gridColumn: "2 / -1", gridRow: 3 }}>
+                {tarefas.map((i) => {
+                  const ini = i.data < d0 ? 0 : dias.findIndex((d) => iso(d) === i.data);
+                  const fim = i.data_fim > d6 ? 6 : dias.findIndex((d) => iso(d) === i.data_fim);
+                  return (
+                    <div key={i.chave} className={s.barraTarefa} style={{ gridColumn: `${ini + 1} / ${fim + 2}` }}
+                         data-corta-ini={i.data < d0} data-corta-fim={i.data_fim > d6}>
+                      <Item i={i} compacto onAbrir={abrir} />
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          <div className={s.horas} style={{ gridColumn: 1, gridRow: 4, height: horas.length * PX_HORA }}>
+            {horas.map((h) => <span key={h} style={{ top: (h - h0) * PX_HORA }}>{String(h).padStart(2, "0")}:00</span>)}
+          </div>
+          {dias.map((d, k) => {
+            const di = iso(d);
+            const evs = comHora.filter((i) => i.data === di);
+            const pos = colunas(evs);
+            return (
+              <div key={di} className={s.colunaHoras} style={{ gridColumn: k + 2, gridRow: 4, height: horas.length * PX_HORA }}
+                   data-hoje={di === hojeIso}
+                   onClick={(e) => {
+                     if (!podeEditar) return;
+                     const y = e.clientY - (e.currentTarget as HTMLElement).getBoundingClientRect().top;
+                     const h = Math.min(h1 - 1, Math.max(h0, h0 + Math.floor(y / PX_HORA)));
+                     setEvento({ ev: null, data: di, hora: `${String(h).padStart(2, "0")}:00` });
+                   }}>
+                {horas.map((h) => <i key={h} className={s.linhaHora} style={{ top: (h - h0) * PX_HORA }} />)}
+                {di === hojeIso && minAgora >= h0 * 60 && minAgora < h1 * 60 && (
+                  <i className={s.agora} style={{ top: (minAgora - h0 * 60) * PX_HORA / 60 }} aria-hidden="true" />
+                )}
+                {evs.map((i) => {
+                  const ini = minutos(i.hora_inicio);
+                  const fim = i.hora_fim ? minutos(i.hora_fim) : ini + 60;
+                  const p = pos.get(i.chave) ?? { col: 0, de: 1 };
+                  return (
+                    <Item key={i.chave} i={i} onAbrir={abrir} compacto={fim - ini < 45}
+                          estilo={{
+                            position: "absolute",
+                            top: (ini - h0 * 60) * PX_HORA / 60,
+                            height: Math.max(20, (fim - ini) * PX_HORA / 60 - 2),
+                            left: `calc(${(100 / p.de) * p.col}% + 2px)`,
+                            width: `calc(${100 / p.de}% - 4px)`,
+                          }} />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* telemóvel: a mesma semana em lista */}
+        <ol className={`${s.lista} ${s.semanaMovel}`}>
+          {dias.map((d) => {
+            const di = iso(d);
+            const lst = [...eventos.filter((i) => ocupaDia(i, di)), ...tarefas.filter((i) => i.data === di || i.data_fim === di)];
+            return (
+              <li key={di} data-hoje={di === hojeIso}>
+                <h3>{diaLongo(di)}
+                  {podeEditar && <button type="button" className={s.addDia} onClick={() => novo(di)} aria-label={`Adicionar a ${diaLongo(di)}`}>+</button>}
+                </h3>
+                <div className={s.itensDia}>
+                  {lst.length ? lst.map((i) => <Item key={i.chave} i={i} dia={di} onAbrir={abrir} />)
+                    : <span className={s.dicaVazia}>—</span>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </>
     );
   }
 
@@ -324,7 +433,8 @@ export default function PaginaAgenda() {
         </p>
 
         {evento && (
-          <DialogoEvento key={evento.ev?.id ?? `novo-${evento.data}`} evento={evento.ev} dataInicial={evento.data}
+          <DialogoEvento key={evento.ev?.id ?? `novo-${evento.data}-${evento.hora ?? ""}`} evento={evento.ev} dataInicial={evento.data}
+                         horaInicial={evento.hora}
                          podeEditar={podeEditar} podeEliminar={podeEliminar} pessoas={pessoas} sitios={sitios}
                          minhaPessoa={temPessoa ? utilizador?.nome ?? null : null}
                          onFechar={() => setEvento(null)}

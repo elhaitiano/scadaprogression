@@ -6,6 +6,14 @@ export type TipoEvento = "reuniao" | "visita" | "prazo";
 export type TipoItem = TipoEvento | "tarefa";
 export type EstadoEvento = "previsto" | "realizado" | "cancelado";
 export type Vista = "mes" | "semana" | "lista";
+export type Repeticao = "" | "diaria" | "semanal" | "mensal";
+
+export interface Conflito {
+  pessoa: string;
+  com: string;
+  horario: string;
+  data?: string;
+}
 
 export interface ItemAgenda {
   chave: string;
@@ -26,6 +34,10 @@ export interface ItemAgenda {
   progresso?: number;
   seccao?: string;
   equipa_texto?: string;
+  serie: boolean;               // ocorrência de um evento que se repete
+  tarefa: number | null;        // tarefa do planeamento ligada ao evento
+  tarefa_nome: string | null;
+  conflitos: Conflito[];        // pessoas ocupadas noutro evento à mesma hora
 }
 
 export interface RespostaAgenda {
@@ -46,10 +58,16 @@ export interface Evento {
   local: string;
   sitio: number | null;
   tarefa: number | null;
+  tarefa_nome: string | null;
   participantes: number[];
   participantes_externos: string;
   descricao: string;
   estado: EstadoEvento;
+  repeticao: Repeticao;
+  intervalo: number;
+  dias_semana: string;          // "0,3" = segunda e quinta
+  repetir_ate: string | null;
+  excepcoes: string[];
   criado_por_nome: string | null;
   actualizado_por_nome: string | null;
 }
@@ -66,6 +84,20 @@ export const ESTADOS_EVENTO: { id: EstadoEvento; nome: string }[] = [
   { id: "realizado", nome: "Realizado" },
   { id: "cancelado", nome: "Cancelado" },
 ];
+
+export const REPETICOES: { id: Repeticao; nome: string }[] = [
+  { id: "", nome: "Não se repete" },
+  { id: "diaria", nome: "Todos os dias úteis" },
+  { id: "semanal", nome: "Semanal" },
+  { id: "mensal", nome: "Mensal (mesmo dia do mês)" },
+];
+
+/** "07:30" → minutos desde a meia-noite */
+export function minutos(h: string | null): number {
+  if (!h) return 0;
+  const [a, b] = h.split(":").map(Number);
+  return a * 60 + (b || 0);
+}
 
 export const DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 export const DIAS_SEMANA_CURTOS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
