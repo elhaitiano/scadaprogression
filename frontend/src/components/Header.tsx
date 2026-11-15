@@ -26,6 +26,7 @@ export default function Header() {
           <Link href="/planeamento" aria-current={pathname.startsWith("/planeamento") ? "page" : undefined}>
             Planeamento
           </Link>
+          <Link href="/agenda" aria-current={pathname.startsWith("/agenda") ? "page" : undefined}>Agenda</Link>
         </nav>
         {utilizador && (
           <div className="user-chip">
