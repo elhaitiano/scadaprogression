@@ -156,7 +156,8 @@ class Command(BaseCommand):
 
         for nome in sem_correspondencia:
             self.stderr.write(self.style.WARNING(f"Sítio do Excel sem correspondência na base de dados: '{nome}'"))
-        faltam = [s.nome for s in sitios.values() if s.id not in colunas]
+        # faltam = [s.nome for s in sitios.values() if s.id not in colunas]
+        faltam = [s.nome for s in sitios.values() if s.id not in colunas and s.lote]
         if faltam:
             self.stderr.write(self.style.WARNING(f"Sítios da base de dados ausentes do Excel: {', '.join(faltam)}"))
 

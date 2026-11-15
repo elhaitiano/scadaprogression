@@ -245,7 +245,8 @@ def _estado_rtu(ws, sitios, refs, folha_base):
 
 
 def construir_estado():
-    sitios = list(Sitio.objects.order_by("lote", "ordem", "nome"))
+    # sitios = list(Sitio.objects.order_by("lote", "ordem", "nome"))
+    sitios = list(Sitio.objects.exclude(lote="").order_by("lote", "ordem", "nome"))
     actividades = {}
     for a in Actividade.objects.order_by("fase", "ordem"):
         actividades.setdefault(a.fase, []).append(a)

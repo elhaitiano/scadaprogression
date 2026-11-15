@@ -40,3 +40,4 @@ docs/
 .env.local
 .env.*.local
 !.env.example
+PROAGUA_SCADA_entrega/

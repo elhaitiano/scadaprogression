@@ -87,7 +87,7 @@ class SitioViewSet(viewsets.ModelViewSet):
         """Excel no formato 'ProAgua_Estado_RTU_por_Sitio' (Estado RTU + Base de cálculo)."""
         reposta = HttpResponse(
             construir_estado(),
-            content_type="application/vnd.opnxmlformats-officedocument.spreadsheetml.sheet",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         reposta["Content-Disposition"] = f'attachment; filename="{nome_ficheiro_estado()}"'
         return reposta
@@ -168,7 +168,7 @@ class TarefaViewSet(viewsets.ModelViewSet):
             conteudo,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        resposta["Content-Disposition"] = f'attachement; filename="{nome_ficheiro(segunda)}"'
+        resposta["Content-Disposition"] = f'attachment; filename="{nome_ficheiro(segunda)}"'
         return resposta
 
     def get_queryset(self):
@@ -226,7 +226,8 @@ class PainelViewSet(viewsets.ViewSet):
         seg = hoje - timedelta(days=hoje.weekday())
         dom = seg + timedelta(days=6)
 
-        sitios = list(Sitio.objects.prefetch_related("actividades__actividade"))
+        # sitios = list(Sitio.objects.prefetch_related("actividades__actividade"))
+        sitios = list(Sitio.objects.exclude(lote="").prefetch_related("actividades__actividade"))
         prog = {s.id: calcular_progresso(s.actividades.all()) for s in sitios}
 
         def media(lista):

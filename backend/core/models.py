@@ -26,9 +26,17 @@ class Sitio(models.Model):
         REAPROVEITADO = "reaproveitado", "Armário reaproveitado / quadro reaproveitado"
         OUTRO = "outro", "Outro"
 
+    class Sistema(models.TextChoices):
+        S1 = "S1", "Sistema I"
+        S2 = "S2", "Sistema II"
+        S3_LSE = "S3_LSE", "Sistema III · Luanda Sudeste"
+        S3_LSK = "S3_LSK", "Sistema III · Luanda Sul e Kikuxi"
+        PER = "PER", "Periféricos"
+
     tipo = models.CharField(max_length=3, choices=Tipo.choices)
     nome = models.CharField(max_length=80)
-    lote = models.CharField(max_length=2, choices=Lote.choices)
+    lote = models.CharField(max_length=2, choices=Lote.choices, blank=True)
+    sistema = models.CharField(max_length=6, choices=Sistema.choices, blank=True)
     rtu_modelo = models.CharField("RTU (modelo)", max_length=120, blank=True)
     ferramenta = models.CharField("Ferramenta de configuração", max_length=120, blank=True)
     entradas = models.CharField("Entradas DI/AI", max_length=80, blank=True)
@@ -298,3 +306,76 @@ class Obstaculo(models.Model):
 
     def __str__(self):
         return f"{self.sitio} · {self.get_categoria_display()} · {self.data:%d/%m/%Y}"
+
+# ================= Elementos =================
+class Elemento(models.Model):
+    """Elemento de campo do sinóptico de instrumentação (bomba, alimentação, caudalímetro, sensor...).
+    P (previsto) = quantidade, se aplicável. R (realizado) = concluidos.
+    A soma por categoria dá a % de Montagem do novo dashboard (sem introduzir P/R à mão).
+    """
+
+    class Categoria(models.TextChoices):
+        ALIM = "alim", "Alimentações (ENDE / gerador)"
+        BAB = "bab", "Bombas água bruta"
+        BAT = "bat", "Bombas água tratada"
+        CAUD = "caud", "Caudalímetros"
+        PRES = "pres", "Sensores de pressão"
+        NIV = "niv", "Sensores de nível"
+        QUAL = "qual", "Qualidade de água"
+
+    class Accao(models.TextChoices):
+        LIGAR = "ligar", "Ligar"
+        CONSERVAR = "conservar", "Conservar"
+        REPARAR = "reparar", "Reparar"
+        SUBSTITUIR = "substituir", "Substituir"
+        INSTALAR = "instalar", "Instalar"
+        POR_DEFINIR = "por_definir", "Por definir"
+
+    class EstadoFisico(models.TextChoices):
+        POR_INSTALAR = "por_instalar", "Por instalar"
+        INSTALADO = "instalado", "Instalado"
+        SUBSTITUIDO = "substituido", "Substituído"
+        EXISTENTE = "existente", "Existente"
+
+    class Origem(models.TextChoices):
+        SINOPTICO = "sinoptico", "Sinóptico de instrumentação"
+        MANUAL = "manual", "Acrescentado no terreno"
+
+    sitio = models.ForeignKey(Sitio, on_delete=models.CASCADE, related_name="elementos")
+    grupo = models.CharField(max_length=40, blank=True, help_text="Fase da ETA, ex.: 'Fase 2'")
+    categoria = models.CharField(max_length=4, choices=Categoria.choices)
+    agua = models.CharField("Água", max_length=10, blank=True,
+                            choices=[("bruta", "Água bruta"), ("tratada", "Água tratada")])
+    nome = models.CharField(max_length=160)
+    tag = models.CharField("TAG", max_length=60, blank=True)
+    quantidade = models.PositiveSmallIntegerField(default=1, help_text="Nº de pontos (ex.: '12 bombas' = 12)")
+    accao_prevista = models.CharField("Acção prevista", max_length=12, choices=Accao.choices, default=Accao.POR_DEFINIR)
+    estado_fisico = models.CharField("Estado físico", max_length=12, choices=EstadoFisico.choices, default=EstadoFisico.EXISTENTE)
+    concluidos = models.PositiveSmallIntegerField(default=0, help_text="Pontos com dados a chegar ao RTU")
+    aplicavel = models.BooleanField(default=True, help_text="Desmarcar = N/A (não conta no previsto)")
+    motivo_na = models.CharField("Motivo N/A", max_length=200, blank=True)
+    origem = models.CharField(max_length=10, choices=Origem.choices, default=Origem.SINOPTICO)
+    a_confirmar = models.BooleanField(default=False, help_text="Realizado herdado do Excel (por categoria); confirmar no terreno")
+    notas = models.TextField(blank=True)
+    ordem = models.PositiveSmallIntegerField(default=0)
+    actualizado_em = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["sitio", "grupo", "ordem", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["sitio", "grupo", "nome"], name="elemento_unico_por_sitio"),
+            models.CheckConstraint(condition=models.Q(concluidos__lte=models.F("quantidade")), name="elemento_concluidos_lte_quantidade"),
+        ]
+
+    def __str__(self):
+        return f"{self.sitio} · {self.nome}"
+
+    @property
+    def previsto(self):
+        return self.quantidade if self.aplicavel else 0
+
+    @property
+    def realizado(self):
+        return self.concluidos if self.aplicavel else 0
