@@ -441,6 +441,27 @@ class Evento(models.Model):
     def __str__(self):
         return f"{self.data:%d/%m/%Y} · {self.titulo}"
 
+class TipoMeio(models.Model):
+    """Catálogo de tipos (como o EquipmentType do SHERT): Grua, Camião basculante, Calibrador 4-20 mA…
+    Cada tipo pertence a uma das três categorias e diz em que unidade se mede a capacidade."""
+
+    nome = models.CharField(max_length=80, unique=True)
+    categoria = models.CharField(max_length=10, choices=[
+        ("viatura", "Viatura"), ("ferramenta", "Ferramenta / instrumento"), ("pesado", "Equipamento pesado")])
+    unidade = models.CharField("Unidade da capacidade", max_length=12, blank=True,
+                               help_text="Ex.: t, m³, m, kVA, lugares. Vazio = sem capacidade.")
+    descricao = models.CharField("Descrição", max_length=200, blank=True)
+    activo = models.BooleanField(default=True)
+    ordem = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["categoria", "ordem", "nome"]
+        verbose_name = "tipo de meio"
+        verbose_name_plural = "tipos de meios"
+
+    def __str__(self):
+        return self.nome
+
 # ================= Meios (viaturas, ferramentas/instrumentos, equipamento pesado) =================
 # Lógica inspirada no SHERT: um meio concreto, o seu estado operacional, as afectações por período
 # e, quando não há nenhum disponível, um pedido externo identificado pela referência da PO.
@@ -468,7 +489,9 @@ class Meio(models.Model):
 
     codigo = models.CharField("Código", max_length=40, unique=True, help_text="Ex.: VTR-01, CAL-4-20-02")
     nome = models.CharField(max_length=120, help_text="Ex.: Toyota Hilux, Calibrador 4-20 mA")
-    tipo = models.CharField(max_length=10, choices=Tipo.choices)
+    tipo = models.CharField("Categoria", max_length=10, choices=Tipo.choices)
+    tipo_meio = models.ForeignKey(TipoMeio, null=True, blank=True, on_delete=models.PROTECT, related_name="meios", verbose_name="Tipo")
+    capacidade = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, help_text="Na unidade do tipo (ex.: 20 para um grua de 20 t)")
     propriedade = models.CharField(max_length=8, choices=Propriedade.choices, default=Propriedade.PROPRIO)
     marca = models.CharField(max_length=60, blank=True)
     modelo = models.CharField(max_length=60, blank=True)
@@ -546,7 +569,10 @@ class PedidoMeio(models.Model):
         DEVOLVIDO = "devolvido", "Devolvido"
         ANULADO = "anulado", "Anulado"
 
-    tipo = models.CharField(max_length=10, choices=Meio.Tipo.choices)
+    tipo = models.CharField("Categoria", max_length=10, choices=Meio.Tipo.choices)
+    tipo_meio = models.ForeignKey(TipoMeio, null=True, blank=True, on_delete=models.PROTECT, related_name="pedidos",
+                                  verbose_name="Tipo")
+    capacidade_minima = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     descricao = models.CharField("Descrição", max_length=160, help_text="Ex.: Viatura 4x4 com caixa aberta")
     data_inicio = models.DateField("Necessário de")
     data_fim = models.DateField("Até")

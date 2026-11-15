@@ -1,7 +1,8 @@
 """Meios: viaturas, ferramentas/instrumentos e equipamento pesado (lógica do SHERT, simplificada).
 
+    /api/tipos-meios/                             catálogo de tipos (Grua, Camião basculante…) — escrita: Administrador
     /api/meios/                                   CRUD do parque
-    /api/meios/disponibilidade/?desde=…&ate=…&hora_inicio=…&hora_fim=…&tipo=…&excluir=<alocação>
+    /api/meios/disponibilidade/?desde=…&ate=…&hora_inicio=…&hora_fim=…&tipo=…&tipo_meio=…&capacidade_min=…&excluir=…
                                                   cada meio com "disponivel" e os motivos quando não está
     /api/meios/<id>/calendario/?desde=…&ate=…     afectações do meio no período
     /api/alocacoes/?tarefa=…|evento=…|meio=…      afectações (Técnico cria/altera, só Administrador elimina…
@@ -19,6 +20,7 @@ Regras de coerência:
 - um meio não pode ter duas afectações que se sobreponham (dias inteiros, ou horas no mesmo dia).
 """
 from datetime import date, time, timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.db.models import Q
@@ -29,8 +31,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .agenda import ocorrencias
-from .models import Alocacao, Evento, Meio, PedidoMeio, Pessoa, Tarefa
-from .permissions import TarefaPermission, TemPerfil, perfil
+from .models import Alocacao, Evento, Meio, PedidoMeio, Pessoa, Tarefa, TipoMeio
+from .permissions import CatalogoPermission, TarefaPermission, TemPerfil, perfil
 from .serializers import nome_utilizador
 
 MAX_DIAS = 92
@@ -48,6 +50,20 @@ def _hora(v):
         return time.fromisoformat(v) if v else None
     except ValueError:
         return None
+
+
+def _dec(v):
+    try:
+        return Decimal(str(v).replace(",", ".")) if v not in (None, "") else None
+    except InvalidOperation:
+        return None
+
+
+def capacidade_txt(valor, unidade):
+    if valor is None:
+        return ""
+    n = f"{valor.normalize():f}".replace(".", ",")
+    return f"{n} {unidade}".strip()
 
 
 def _min(h, omissao):
@@ -100,6 +116,51 @@ def motivos_indisponivel(meio, ini, fim, hi=None, hf=None, excluir=None, alocaco
     return motivos
 
 
+# ---------------------------------------------------------------- catálogo de tipos
+
+class TipoMeioSerializer(serializers.ModelSerializer):
+    categoria_nome = serializers.CharField(source="get_categoria_display", read_only=True)
+    meios = serializers.IntegerField(source="meios.count", read_only=True)
+
+    class Meta:
+        model = TipoMeio
+        fields = ["id", "nome", "categoria", "categoria_nome", "unidade", "descricao", "activo", "ordem", "meios"]
+
+    def validate_nome(self, v):
+        v = v.strip()
+        qs = TipoMeio.objects.filter(nome__iexact=v)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("Já existe um tipo com este nome.")
+        return v
+
+    def validate(self, d):
+        inst = self.instance
+        if inst and "categoria" in d and d["categoria"] != inst.categoria and inst.meios.exists():
+            raise serializers.ValidationError({"categoria": "Há meios deste tipo: não se pode mudar a categoria."})
+        return d
+
+
+class TipoMeioViewSet(viewsets.ModelViewSet):
+    serializer_class = TipoMeioSerializer
+    permission_classes = [CatalogoPermission]   # leitura: todos · escrita: Administrador
+
+    def get_queryset(self):
+        qs = TipoMeio.objects.all()
+        if self.request.query_params.get("activos") == "1":
+            qs = qs.filter(activo=True)
+        if self.request.query_params.get("categoria"):
+            qs = qs.filter(categoria=self.request.query_params["categoria"])
+        return qs
+
+    def destroy(self, request, *args, **kwargs):
+        t = self.get_object()
+        if t.meios.exists() or t.pedidos.exists():
+            return Response({"detail": "Há meios ou pedidos deste tipo. Desactive-o em vez de o eliminar."}, status=409)
+        return super().destroy(request, *args, **kwargs)
+
+
 # ---------------------------------------------------------------- meios
 
 class MeioSerializer(serializers.ModelSerializer):
@@ -109,13 +170,18 @@ class MeioSerializer(serializers.ModelSerializer):
     responsavel_nome = serializers.CharField(source="responsavel.nome", read_only=True, default=None)
     actualizado_por_nome = serializers.SerializerMethodField()
     hoje = serializers.SerializerMethodField()
+    tipo_meio_nome = serializers.CharField(source="tipo_meio.nome", read_only=True, default=None)
+    unidade = serializers.CharField(source="tipo_meio.unidade", read_only=True, default="")
+    capacidade_texto = serializers.SerializerMethodField()
 
     class Meta:
         model = Meio
-        fields = ["id", "codigo", "nome", "tipo", "tipo_nome", "propriedade", "propriedade_nome", "marca", "modelo",
+        fields = ["id", "codigo", "nome", "tipo", "tipo_nome", "tipo_meio", "tipo_meio_nome", "capacidade", "unidade",
+                  "capacidade_texto", "propriedade", "propriedade_nome", "marca", "modelo",
                   "matricula", "numero_serie", "responsavel", "responsavel_nome", "estado", "estado_nome", "activo",
                   "fornecedor", "po_referencia", "notas", "actualizado_em", "actualizado_por_nome", "hoje"]
         read_only_fields = ["actualizado_em"]
+        extra_kwargs = {"tipo": {"required": False}}
 
     def get_actualizado_por_nome(self, obj):
         return nome_utilizador(obj.actualizado_por)
@@ -128,6 +194,23 @@ class MeioSerializer(serializers.ModelSerializer):
             obj.alocacoes.filter(data_inicio__lte=hoje, data_fim__gte=hoje).select_related("tarefa", "evento", "pessoa"))
         return [{"id": a.pk, "texto": _onde(a), "pessoa": a.pessoa.nome if a.pessoa else None,
                  "periodo": _periodo_txt(a.data_inicio, a.data_fim, a.hora_inicio, a.hora_fim)} for a in lst]
+
+    def get_capacidade_texto(self, obj):
+        return capacidade_txt(obj.capacidade, obj.tipo_meio.unidade if obj.tipo_meio else "")
+
+    def validate(self, d):
+        inst = self.instance
+        tm = d["tipo_meio"] if "tipo_meio" in d else (inst.tipo_meio if inst else None)
+        if tm:
+            d["tipo"] = tm.categoria          # a categoria vem sempre do tipo
+            if not tm.unidade:
+                d["capacidade"] = None
+        elif not d.get("tipo", inst.tipo if inst else None):
+            raise serializers.ValidationError({"tipo_meio": "Escolha o tipo."})
+        cap = d.get("capacidade")
+        if cap is not None and cap <= 0:
+            raise serializers.ValidationError({"capacidade": "A capacidade tem de ser maior que zero."})
+        return d
 
     def validate_codigo(self, v):
         v = v.strip().upper()
@@ -144,10 +227,12 @@ class MeioViewSet(viewsets.ModelViewSet):
     permission_classes = [TarefaPermission]
 
     def get_queryset(self):
-        qs = Meio.objects.select_related("responsavel", "actualizado_por__pessoa")
+        qs = Meio.objects.select_related("responsavel", "tipo_meio", "actualizado_por__pessoa")
         p = self.request.query_params
         if p.get("tipo"):
             qs = qs.filter(tipo=p["tipo"])
+        if p.get("tipo_meio"):
+            qs = qs.filter(tipo_meio_id=p["tipo_meio"])
         if p.get("activo") in ("0", "1"):
             qs = qs.filter(activo=p["activo"] == "1")
         if p.get("q"):
@@ -189,9 +274,12 @@ class MeioViewSet(viewsets.ModelViewSet):
             return Response({"ate": ["A data final é anterior à inicial."]}, status=400)
         hi, hf = (_hora(p.get("hora_inicio")), _hora(p.get("hora_fim"))) if ini == fim else (None, None)
         excluir = int(p["excluir"]) if p.get("excluir", "").isdigit() else None
-        meios = Meio.objects.filter(activo=True).select_related("responsavel")
+        meios = Meio.objects.filter(activo=True).select_related("responsavel", "tipo_meio")
         if p.get("tipo"):
             meios = meios.filter(tipo=p["tipo"])
+        if p.get("tipo_meio"):
+            meios = meios.filter(tipo_meio_id=p["tipo_meio"])
+        cap_min = _dec(p.get("capacidade_min"))
         alocs = {}
         for a in (Alocacao.objects.filter(data_inicio__lte=fim, data_fim__gte=ini)
                   .select_related("tarefa", "evento", "pessoa")):
@@ -199,8 +287,17 @@ class MeioViewSet(viewsets.ModelViewSet):
         res = []
         for m in meios:
             motivos = motivos_indisponivel(m, ini, fim, hi, hf, excluir, alocs.get(m.pk, []))
+            un = m.tipo_meio.unidade if m.tipo_meio else ""
+            if cap_min is not None and un:
+                if m.capacidade is None:
+                    motivos.insert(0, {"tipo": "capacidade", "texto": "Capacidade não registada"})
+                elif m.capacidade < cap_min:
+                    motivos.insert(0, {"tipo": "capacidade", "texto": f"Capacidade {capacidade_txt(m.capacidade, un)} "
+                                                                       f"< {capacidade_txt(cap_min, un)}"})
             res.append({"id": m.pk, "codigo": m.codigo, "nome": m.nome, "tipo": m.tipo,
-                        "tipo_nome": m.get_tipo_display(), "propriedade": m.propriedade,
+                        "tipo_nome": m.get_tipo_display(), "tipo_meio": m.tipo_meio_id,
+                        "tipo_meio_nome": m.tipo_meio.nome if m.tipo_meio else None,
+                        "capacidade_texto": capacidade_txt(m.capacidade, un), "propriedade": m.propriedade,
                         "matricula": m.matricula, "disponivel": not motivos, "motivos": motivos})
         res.sort(key=lambda x: (not x["disponivel"], x["tipo"], x["nome"]))
         return Response({"desde": ini, "ate": fim, "meios": res})
@@ -348,13 +445,18 @@ class PedidoMeioSerializer(serializers.ModelSerializer):
     meio_nome = serializers.SerializerMethodField()
     solicitado_por_nome = serializers.SerializerMethodField()
     actualizado_por_nome = serializers.SerializerMethodField()
+    tipo_meio_nome = serializers.CharField(source="tipo_meio.nome", read_only=True, default=None)
+    unidade = serializers.CharField(source="tipo_meio.unidade", read_only=True, default="")
+    capacidade_texto = serializers.SerializerMethodField()
 
     class Meta:
         model = PedidoMeio
-        fields = ["id", "tipo", "tipo_nome", "descricao", "data_inicio", "data_fim", "tarefa", "evento", "onde",
+        fields = ["id", "tipo", "tipo_nome", "tipo_meio", "tipo_meio_nome", "capacidade_minima", "unidade",
+                  "capacidade_texto", "descricao", "data_inicio", "data_fim", "tarefa", "evento", "onde",
                   "pessoa", "pessoa_nome", "estado", "estado_nome", "po_referencia", "fornecedor", "meio", "meio_nome",
                   "chegou_em", "devolvido_em", "notas", "criado_em", "solicitado_por_nome", "actualizado_por_nome"]
         read_only_fields = ["estado", "meio", "chegou_em", "devolvido_em", "criado_em"]
+        extra_kwargs = {"tipo": {"required": False}}
 
     def get_onde(self, obj):
         if obj.tarefa_id:
@@ -365,6 +467,11 @@ class PedidoMeioSerializer(serializers.ModelSerializer):
 
     def get_meio_nome(self, obj):
         return str(obj.meio) if obj.meio else None
+
+    def get_capacidade_texto(self, obj):
+        if obj.capacidade_minima is None or not obj.tipo_meio:
+            return ""
+        return f"≥ {capacidade_txt(obj.capacidade_minima, obj.tipo_meio.unidade)}"
 
     def get_solicitado_por_nome(self, obj):
         return nome_utilizador(obj.solicitado_por)
@@ -381,6 +488,13 @@ class PedidoMeioSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"data_fim": "A data de fim é anterior à de início."})
         if "po_referencia" in d:
             d["po_referencia"] = d["po_referencia"].strip().upper()
+        tm = v("tipo_meio")
+        if tm:
+            d["tipo"] = tm.categoria
+            if not tm.unidade:
+                d["capacidade_minima"] = None
+        elif not v("tipo"):
+            raise serializers.ValidationError({"tipo": "Indique a categoria ou o tipo."})
         if inst and inst.estado in ("devolvido", "anulado"):
             raise serializers.ValidationError("Pedido fechado: já não pode ser alterado.")
         return d
@@ -391,7 +505,7 @@ class PedidoMeioViewSet(viewsets.ModelViewSet):
     permission_classes = [TarefaPermission]
 
     def get_queryset(self):
-        qs = PedidoMeio.objects.select_related("tarefa", "evento", "pessoa", "meio", "solicitado_por__pessoa",
+        qs = PedidoMeio.objects.select_related("tarefa", "evento", "pessoa", "meio", "tipo_meio", "solicitado_por__pessoa",
                                                "actualizado_por__pessoa")
         p = self.request.query_params
         if p.get("abertos") == "1":
@@ -432,6 +546,9 @@ class PedidoMeioViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             meio = Meio.objects.create(
                 codigo=codigo, nome=(dados.get("nome") or pedido.descricao).strip()[:120], tipo=pedido.tipo,
+                tipo_meio=pedido.tipo_meio,
+                capacidade=(_dec(dados.get("capacidade")) or pedido.capacidade_minima)
+                if pedido.tipo_meio and pedido.tipo_meio.unidade else None,
                 propriedade=Meio.Propriedade.ALUGADO, matricula=(dados.get("matricula") or "").strip()[:30],
                 fornecedor=pedido.fornecedor, po_referencia=pedido.po_referencia,
                 notas=f"Pedido #{pedido.pk}", actualizado_por=request.user)
